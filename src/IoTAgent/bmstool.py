@@ -11,7 +11,7 @@ from langchain_core.tools import BaseTool
 from iotagent.demo.tool import getTempFilename
 from datetime import datetime
 
-client = couchdb3.Server("http://admin:mroEPxE8UemPGak@reactxen.sl.cloud9.ibm.com:5984/")
+client = couchdb3.Server("http://admin:password@localhost:5984/")
 
 db = client.get("main")
 
