@@ -8,6 +8,9 @@
 ![Llama](https://img.shields.io/badge/Model-Llama-21C2A4)
 ![Mistral](https://img.shields.io/badge/Model-Mistral-21C2A4) 
 ![Granite](https://img.shields.io/badge/Model-Granite-21C2A4)
+
+📰 [Paper](https://arxiv.org/pdf/2506.03828), 🤗 [Huggingface](https://huggingface.co/papers/2506.03828)
+
 </div>
 
 ## Introduction
