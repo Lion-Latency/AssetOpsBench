@@ -34,7 +34,6 @@ To orchestrate multiple agents and run end-to-end workflow, we developed two fra
 We run AssetOpsBench with 7 Large Language Models and evaluate the trajectories of each run using LLM judge (Llama-4-Maverick-17B) on 6-dimentional criteria. The following is the result of MetaAgent. Please find more results in the paper.
 ![meta_agent_leaderboard](https://github.com/user-attachments/assets/615059be-e296-40d3-90ec-97ee6cb00412)
 
-
 ## Run AssetOpsBench in Docker
 We provide a comprehensive documentation on how to run AssetOpsBench in a pre-built dockerized environment. Please refer to the [guidance](https://github.com/IBM/AssetOpsBench/tree/main/benchmark/README.md).
 
