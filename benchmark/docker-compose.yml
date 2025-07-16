@@ -13,7 +13,7 @@ services:
       - .env
     command: ["sh", "/home/entrypoint.sh" ]
   couchdb:
-    image: couchdb:3.3
+    image: couchdb:3.5
     restart: always
     ports:
       - "5984:5984"
