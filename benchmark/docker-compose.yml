@@ -1,29 +1,28 @@
 services:
-  assetops:
+  assetopsbench:
     platform: linux/amd64
-    container_name: assetopsbench-env
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        GITHUB_TOKEN: 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
+    image: quay.io/assetopsbench-extra
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
     volumes:
-      - ./run_plan_execute.py:/home/run_plan_execute.py
-      - ../scenarios/:/home/scenarios/
+      - ../scenarios/:/home/scenarios/  # location to all utterances
+      - ./run_plan_execute.py:/home/run_plan_execute.py # your python script to run it all
+      - ./entrypoint.sh:/home/entrypoint.sh # your bash script to run it all
     env_file:
       - .env
+    command: ["sh", "/home/entrypoint.sh" ]
   couchdb:
     image: couchdb:3.3
-    container_name: couchdb
     restart: always
     ports:
       - "5984:5984"
     env_file:
       - .env
     volumes:
-      - couchdb-data:/opt/couchdb/data
-      - ./couchdb_setup.sh:/opt/couchdb/etc/couchdb_setup.sh
-      - ../src/assetopsbench/sample_data:/sample_data
+      - couchdb-data:/opt/couchdb/data  # location to couchdb data
+      - ./couchdb_setup.sh:/opt/couchdb/etc/couchdb_setup.sh # your bash script to create couchdb out of raw data
+      - ../src/assetopsbench/sample_data:/sample_data # location to raw (JSON/CSV) data for I/O
     command: ["sh", "/opt/couchdb/etc/couchdb_setup.sh" ]
 
 volumes:
