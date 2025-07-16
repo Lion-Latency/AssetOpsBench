@@ -34,6 +34,8 @@ warnings.filterwarnings("ignore")
 
 PLAN_PREFIX = os.path.dirname(os.path.abspath(__file__)) + "/plan/"
 
+UTTERRANCE_FILE = '/home/scenarios/multi_agent/end2end_utterance.json'
+
 
 def run_planning_workflow_with_reflection(
         question, llm_model, qid, workflow, generate_steps_only=False
@@ -125,13 +127,16 @@ def run_planning_workflow(
     return wf.run(enable_summarization=True)
 
 
-def run_react(react_llm_model_id, workflow="pr", generate_steps_only=False, reverse=False):
+def run_react(utterance_file, react_llm_model_id, workflow="pr", generate_steps_only=False, reverse=False):
     # Load the JSON data from the file
-    with open("./utterances.json", "r") as json_file:
+    with open(utterance_file, "r") as json_file:
         data = json.load(json_file)
 
     if reverse:
         data = data[::-1]
+
+    folder = "./trajectory/ReactAgent"
+    os.makedirs(folder, exist_ok=True)
 
     for utterance in data:
         print(
@@ -160,13 +165,16 @@ def run_react(react_llm_model_id, workflow="pr", generate_steps_only=False, reve
             json.dump(output, file, indent=4)
 
 
-def run_react_reflect(react_llm_model_id, workflow="pr", generate_steps_only=False, reverse=False):
+def run_react_reflect(utterance_file, react_llm_model_id, workflow="pr", generate_steps_only=False, reverse=False):
     # Load the JSON data from the file
-    with open("./utterances.json", "r") as json_file:
+    with open(utterance_file, "r") as json_file:
         data = json.load(json_file)
 
     if reverse:
         data = data[::-1]
+
+    folder = "./trajectory/ReactReflectAgent"
+    os.makedirs(folder, exist_ok=True)
 
     for utterance in data:
         print(
@@ -199,30 +207,20 @@ if __name__ == "__main__":
     # with ThreadPoolExecutor(max_workers=4) as executor:
     #     executor.map(run, [15, 6, 10])
     parser = argparse.ArgumentParser()
+    parser.add_argument("--utterance_file", type=str, default=UTTERRANCE_FILE)
     parser.add_argument("--llm", type=int, default=15)
     parser.add_argument(
-        "--agent", type=str, choices=["react", "reflect", "all"], default="all"
+        "--agent", type=str, choices=["react", "reflect"], default="react"
     )
     parser.add_argument("--workflow", type=str, choices=["p", "pr"], default="pr")
     parser.add_argument("--generate_steps_only", type=bool, default=False)
     parser.add_argument("--reverse", type=bool, default=False)
 
     args = parser.parse_args()
-    if args.agent == "all":
-        run_react_reflect(
-            args.llm,
-            workflow=args.workflow,
-            generate_steps_only=args.generate_steps_only,
-            reverse=args.reverse
-        )
+
+    if args.agent == "react":
         run_react(
-            args.llm,
-            workflow=args.workflow,
-            generate_steps_only=args.generate_steps_only,
-            reverse=args.reverse
-        )
-    elif args.agent == "react":
-        run_react(
+            args.utterance_file,
             args.llm,
             workflow=args.workflow,
             generate_steps_only=args.generate_steps_only,
@@ -230,6 +228,7 @@ if __name__ == "__main__":
         )
     elif args.agent == "reflect":
         run_react_reflect(
+            args.utterance_file,
             args.llm,
             workflow=args.workflow,
             generate_steps_only=args.generate_steps_only,
