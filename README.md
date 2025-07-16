@@ -35,14 +35,5 @@ We run AssetOpsBench with 7 Large Language Models and evaluate the trajectories 
 ![meta_agent_leaderboard](https://github.com/user-attachments/assets/615059be-e296-40d3-90ec-97ee6cb00412)
 
 
-## Run AssetOpsBench By Yourself
-You can replicate our benchmarking results using our provided scripts.
-To run MetaAgent, check running script [here](https://github.com/IBM/AssetOpsBench/tree/main/src/meta_agent/tests). To run AgentHive, check running script [here](https://github.com/IBM/AssetOpsBench/tree/main/src/agent_hive/tests). 
-
-## CouchDB
-
-CouchDB may be downloaded from [here](https://couchdb.apache.org/#download)
-
-The [test dataset](src/assetopsbench/sample_data/chiller6_june2020_sensordata_couchdb.json) may be inserted via a [bulk-docs](https://docs.couchdb.org/en/stable/api/database/bulk-api.html#db-bulk-docs) operation.
-
-The database URL should be updated in [bmstool.py](src/IoTAgent/bmstool.py)
+## Run AssetOpsBench in Docker
+We provide a comprehensive documentation on how to run AssetOpsBench in a pre-built dockerized environment. Please refer to the [guidance](https://github.com/IBM/AssetOpsBench/tree/main/benchmark/README.md).
