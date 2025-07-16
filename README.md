@@ -37,3 +37,10 @@ We run AssetOpsBench with 7 Large Language Models and evaluate the trajectories 
 
 ## Run AssetOpsBench in Docker
 We provide a comprehensive documentation on how to run AssetOpsBench in a pre-built dockerized environment. Please refer to the [guidance](https://github.com/IBM/AssetOpsBench/tree/main/benchmark/README.md).
+
+## Contributors and Contact(*)
+
+- Dhaval Patel (pateldha@us.ibm.com)
+- Shuxin Lin
+- James Rayfield
+- Nianjun Zhou
