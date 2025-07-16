@@ -1,4 +1,3 @@
-git+https://${GITHUB_TOKEN}@github.ibm.com/GenAIApps/nl2anomaliesrules.git@jtray
 git+https://${GITHUB_TOKEN}@github.ibm.com/GenAIApps/IoTAgent.git@dev
 git+https://${GITHUB_TOKEN}@github.ibm.com/GenAIApps/TSFMAgent.git@temp-meta
 git+https://${GITHUB_TOKEN}@github.ibm.com/GenAIApps/FMSRAgent.git@main
