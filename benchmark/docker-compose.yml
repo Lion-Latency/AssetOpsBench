@@ -1,0 +1,30 @@
+services:
+  assetops:
+    platform: linux/amd64
+    container_name: assetopsbench-env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GITHUB_TOKEN: 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
+    volumes:
+      - ./run_plan_execute.py:/home/run_plan_execute.py
+      - ../scenarios/:/home/scenarios/
+    env_file:
+      - .env
+  couchdb:
+    image: couchdb:3.3
+    container_name: couchdb
+    restart: always
+    ports:
+      - "5984:5984"
+    env_file:
+      - .env
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+      - ./couchdb_setup.sh:/opt/couchdb/etc/couchdb_setup.sh
+      - ../src/assetopsbench/sample_data:/sample_data
+    command: ["sh", "/opt/couchdb/etc/couchdb_setup.sh" ]
+
+volumes:
+   couchdb-data: {}
