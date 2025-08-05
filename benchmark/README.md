@@ -20,7 +20,8 @@ In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/main/benchmark
 Now we run the following command,
 
 ```commandline
-cd /path/to/AssetOpsBench 
+cd /path/to/AssetOpsBench
+chmod +x benchmark/entrypoint.sh
 docker-compose -f benchmark/docker-compose.yml build
 docker-compose -f benchmark/docker-compose.yml up
 ```
