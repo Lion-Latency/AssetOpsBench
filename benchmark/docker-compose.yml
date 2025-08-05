@@ -1,7 +1,7 @@
 services:
   assetopsbench:
     platform: linux/amd64
-    image: quay.io/assetopsbench-extra
+    image: quay.io/assetopsbench/assetopsbench-extra
 #    build:
 #      context: .
 #      dockerfile: Dockerfile
