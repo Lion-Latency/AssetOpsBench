@@ -1,122 +1,35 @@
-[
-  {
-    "id": 101,
-    "characteristic_form": "The failure modes for Chiller are: ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "deterministic": true,
-    "text": "List all failure modes of asset Chiller."
+{
+  "Name": "fmsr_utterance.json — Single-agent failure-mode scenario utterances (AssetOpsBench)",
+  "Labeled": "Yes (many records include deterministic expected outputs in `characteristic_form`)",
+  "Time Series": "No (this file contains scenario/utterance records referencing failure modes; it is not raw telemetry)",
+  "Data Source": "IBM/AssetOpsBench GitHub repository",
+  "Missing Values": {
+    "total_missing_cells": 0,
+    "total_cells": 80,
+    "missing_percentage": "0.000%"
   },
-  {
-    "id": 102,
-    "characteristic_form": "The failure modes of asset Chiller 6 are: ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "deterministic": true,
-    "text": "List all failure modes of asset Chiller 6."
-  },
-  {
-    "id": 103,
-    "characteristic_form": "the answer should contain a list of meaningful failure modes for asset wind turbine.",
-    "deterministic": false,
-    "text": "List all failure modes of asset Wind Turbine."
-  },
-  {
-    "id": 104,
-    "deterministic": true,
-    "characteristic_form": "The installed sensors of asset Chiller 6 are: Chiller 6 Chiller % Loaded, Chiller 6 Chiller Efficiency, Chiller 6 Condenser Water Flow, Chiller 6 Condenser Water Return To Tower Temperature, Chiller 6 Liquid Refrigerant Evaporator Temperature, Chiller 6 Power Input, Chiller 6 Return Temperature, Chiller 6 Schedule, Chiller 6 Supply Temperature, Chiller 6 Tonnage.",
-    "text": "List all installed sensors of asset Chiller 6."
-  },
-  {
-    "id": 105,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain a list of sensor names for asset wind turbine.",
-    "text": "Provide some sensors of asset Wind Turbine."
-  },
-  {
-    "id": 106,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "List all failure modes of Chiller 6 that can be detected by Chiller 6 Supply Temperature."
-  },
-  {
-    "id": 107,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "List all failure modes of Chiller 6 that can be detected by temperature sensors."
-  },
-  {
-    "id": 108,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "List all failure modes of Chiller 6 that can be detected by temperature sensors and power input sensors."
-  },
-  {
-    "id": 109,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "Get failure modes for Chiller 6 and only include in final response those that can be monitored using the available sensors."
-  },
-  {
-    "id": 110,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "Are there any failure modes of Chiller 6 that can be predicted by monitoring the vibration sensor data?"
-  },
-  {
-    "id": 111,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "List all sensors of Chiller 6 that are potentially relevant to Compressor Overheating."
-  },
-  {
-    "id": 112,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one of more sensors of Chiller 6. The sensors of Chiller 6 need to be from the list [Chiller 6 Chiller % Loaded, Chiller 6 Chiller Efficiency, Chiller 6 Condenser Water Flow, Chiller 6 Condenser Water Return To Tower Temperature, Chiller 6 Liquid Refrigerant Evaporator Temperature, Chiller 6 Power Input, Chiller 6 Return Temperature, Chiller 6 Schedule, Chiller 6 Supply Temperature, Chiller 6 Tonnage.] ",
-    "text": " If compressor overheating occurs for Chiller 6, which sensor should be prioritized for monitoring this specific failure?"
-  },
-  {
-    "id": 113,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one of more sensors of Chiller 6. The sensors of Chiller 6 need to be from the list [Chiller 6 Chiller % Loaded, Chiller 6 Chiller Efficiency, Chiller 6 Condenser Water Flow, Chiller 6 Condenser Water Return To Tower Temperature, Chiller 6 Liquid Refrigerant Evaporator Temperature, Chiller 6 Power Input, Chiller 6 Return Temperature, Chiller 6 Schedule, Chiller 6 Supply Temperature, Chiller 6 Tonnage.] ",
-    "text": " If Evaporator Water side fouling occurs for Chiller 6, which sensor is most relevant for monitoring this specific failure?"
-  },
-  {
-    "id": 114,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "What are the failure modes of Chiller 6 that can be identified by analyzing the data from the available sensors?"
-  },
-  {
-    "id": 115,
-    "deterministic": false,
-    "characteristic_form": "the answer should be a plan by the maintenance experts to early detect the failure of purge unit of chiller 6. the answer should include the sensors that can be used to detect the failure of purge unit of chiller 6",
-    "text": "Purge unit of chiller 6 have possibility to excess purge, what is the plan by the maintenance experts to early detect the failure?"
-  },
-  {
-    "id": 116,
-    "deterministic": false,
-    "characteristic_form": "the answer should be a machine learning recipe for detecting overheating failure for Chiller 6. the answer should include the sensors that can be used to detect the failure of overheating for Chiller 6",
-    "text": "Generate a machine learning recipe for detecting overheating failure for Chiller 6. Result should include feature sensors and target sensor."
-  },
-  {
-    "id": 117,
-    "deterministic": false,
-    "characteristic_form": "the answer should describe the temporal behavior of the power input of Chiller 6",
-    "text": "When compressor motor of Chiller 6 fails, what is the temporal behavior of the power input?"
-  },
-  {
-    "id": 118,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "When power input of Chiller 6 drops, what is the potential failure that causes it?"
-  },
-  {
-    "id": 119,
-    "deterministic": false,
-    "characteristic_form": "the answer should contain one or more failure modes of Chiller 6. The failure modes of Chiller 6 need to be from the list ['Compressor Overheating: Failed due to Normal wear, overheating', 'Heat Exchangers: Fans: Degraded motor or worn bearing due to Normal use', 'Evaporator Water side fouling', 'Condenser Water side fouling', 'Condenser Improper water side flow rate', 'Purge Unit Excessive purge', 'Refrigerant Operated Control Valve Failed spring']",
-    "text": "When the Liquid Refrigerant Evaporator Temperature of Chiller 6 drops, what failure is most likely to occur?"
-  },
-  {
-    "id": 120,
-    "deterministic": false,
-    "text": "I want to build an anomaly model for identifying a chiller trip failure for POKMAIN chiller 6. Provide me a list of sensors that I should use, along with the temporal behavior,",
-    "characteristic_form": "the answer should contain how to build an anomaly model for identifying a chiller trip failure for POKMAIN chiller 6. The answer should include sensors that I should use, along with the temporal behavior,"
-  }
-]
+  "Dataset Characteristics": "A small collection of single-agent utterance scenarios focused on failure-mode and root-cause knowledge (e.g., lists of failure modes for assets such as Chiller and Wind Turbine). Each record contains an id, a textual prompt, and a `characteristic_form` describing the expected response; some entries are marked deterministic.",
+  "Feature Type": "Categorical (id), Text (text, characteristic_form), Boolean/flag (deterministic)",
+  "Associated Tasks": "Knowledge retrieval, failure mode enumeration, deterministic-answer evaluation, single-agent prompt testing, NLP extraction of domain-specific lists",
+  "Number of Instances": 20,
+  "Number of Features": 4,
+  "Date Donated": "TO_FILL_BY_USER",
+  "Source": "https://github.com/IBM/AssetOpsBench",
+  "Summary": "20 single-agent scenario utterances for failure-mode and root-cause tasks (fmsr_utterance.json). Includes deterministic expected outputs for many prompts; used to validate single-agent knowledge and extraction behavior.",
+  "Description": "This JSON file (`fmsr_utterance.json`) contains 20 records of single-agent prompts used in AssetOpsBench focusing on failure modes (e.g., for Chiller, Chiller 6, Wind Turbine). The `characteristic_form` field often contains the canonical or expected list of failure modes. Use this file to evaluate correctness of single-agent knowledge responses, extraction fidelity, and handling of deterministic vs non-deterministic queries.",
+  "Additional Tags": [
+    "scenarios",
+    "failure-modes",
+    "single-agent",
+    "benchmark",
+    "NLP",
+    "assetopsbench",
+    "fmsr"
+  ],
+  "References": [
+    {
+      "Text": "AssetOpsBench - GitHub (repo)",
+      "Link": "https://github.com/IBM/AssetOpsBench"
+    }
+  ]
+}
