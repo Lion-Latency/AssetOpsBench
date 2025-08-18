@@ -1,0 +1,4 @@
+file,parsed,num_objects,utterance_valid,utterance_invalid,scenario_valid,scenario_invalid
+all_utterance.jsonl,True,141,141,0,0,0
+AssetOpsBench-croissant.json,True,1,0,1,0,0
+sensor_june_croissant.json,True,1,0,1,0,0

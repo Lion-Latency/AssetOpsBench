@@ -1,0 +1,7 @@
+Validation run: 2025-08-18T03:48:28.902521Z
+Input: E:\AssetOpsBench\scenarios
+Files: 3
+
+- all_utterance.jsonl: utt_ok=141 utt_err=0 scen_ok=0 scen_err=0
+- AssetOpsBench-croissant.json: utt_ok=0 utt_err=1 scen_ok=0 scen_err=0
+- sensor_june_croissant.json: utt_ok=0 utt_err=1 scen_ok=0 scen_err=0
