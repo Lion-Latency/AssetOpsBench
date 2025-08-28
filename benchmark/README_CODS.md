@@ -1,3 +1,193 @@
+
+# AssetOpsBench Setup Guide
+
+This guide describes how to fork, configure, and run the **AssetOpsBench** project using Conda and Docker on macOS.
+
+---
+
+## 1. Fork and Clone
+
+Fork the AssetOpsBench repository:
+
+```bash
+git clone https://github.com/IBM/AssetOpsBench.git
+```
+
+Switch to the `Asset_CODS` branch:
+
+```bash
+git checkout Asset_CODS
+```
+
+---
+
+## 2. Project Structure
+
+Your local root directory:
+
+```
+/Users/jzhou/work/notebooks/AssetOpsBench
+```
+
+Create the folder if it doesn’t exist:
+
+```bash
+mkdir -p /Users/jzhou/work/notebooks/AssetOpsBench
+```
+
+---
+
+## 3. Conda Environment
+
+Create and activate the Conda environment for **AssetOpsBench**.
+
+Check your Conda installation:
+
+```bash
+conda info | grep 'base environment'
+```
+
+Example output (Miniforge):
+
+```
+base environment : /Users/jzhou/miniforge3  (writable)
+```
+
+Adjust your `entrypoint.sh` to source the correct Conda environment:
+
+```bash
+# Original (inside Docker image)
+source /opt/conda/etc/profile.d/conda.sh
+
+# On macOS with Miniforge
+source /Users/jzhou/miniforge3/etc/profile.d/conda.sh
+```
+
+---
+
+## 4. Docker Setup
+
+Check your Docker installation:
+
+```bash
+which docker
+```
+
+Example output:
+
+```
+/Users/jzhou/.rd/bin/docker
+```
+
+This indicates **Rancher Desktop** is being used:
+
+```bash
+ls /Applications | grep -i rancher
+# Rancher Desktop.app
+```
+
+If you switch to another vendor, reconfigure Docker accordingly.
+
+---
+
+## 5. Build and Run
+
+Follow the official [benchmark README](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/README.md).
+
+### Swap entrypoint scripts (if needed)
+
+```bash
+mv entrypoint.sh entrypoint_old.sh
+mv entrypoint_joe.sh entrypoint.sh
+```
+
+This change accounts for different Conda environment paths.
+
+### Build the Docker image
+
+```bash
+docker-compose -f benchmark/docker-compose.yml build
+```
+
+### Run
+
+```bash
+docker-compose -f benchmark/docker-compose.yml up
+```
+
+---
+
+## 6. Troubleshooting
+
+- **Docker not running**
+
+```text
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+```
+
+➡ Ensure Rancher Desktop (or Docker Desktop) is running.
+
+- **Expired Kubernetes certificate**
+
+Clean up and restart:
+
+```bash
+kubectl get nodes
+kubectl cluster-info
+docker ps
+docker images | head
+```
+
+- **Segmentation fault**
+
+```text
+qemu: uncaught target signal 11 (Segmentation fault) - core dumped
+```
+
+This may be due to ARM emulation on macOS (qemu). Ensure correct image base and dependencies are installed.
+
+---
+
+## 7. Environment Variables
+
+Fill in your `.env` file with the following:
+
+```env
+COUCHDB_USERNAME=admin
+COUCHDB_PASSWORD=password
+COUCHDB_DBNAME=chiller
+COUCHDB_URL=http://couchdb:5984/
+
+WATSONX_APIKEY=
+WATSONX_PROJECT_ID=
+WATSONX_URL=
+
+PATH_TO_DATASETS_DIR=/opt/conda/envs/assetopsbench/lib/python3.12/site-packages/tsfmagent/data/datasets
+PATH_TO_MODELS_DIR=/opt/conda/envs/assetopsbench/lib/python3.12/site-packages/tsfmagent/data/tsfm_models
+PATH_TO_OUTPUTS_DIR=/opt/conda/envs/assetopsbench/lib/python3.12/site-packages/tsfmagent/output
+
+SKYSPARK_USERNAME=
+SKYSPARK_PASSWORD=
+SKYSPARK_URL=
+
+OPENAI_API_KEY=
+```
+
+### Notes
+- **Skyspark credentials**: Required if integrating with building management systems.
+- **OpenAI API key**: Required if using LLM-based agents.
+
+---
+
+## 8. References
+
+- [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench)
+- [Benchmark README](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/README.md)
+- [Rancher Desktop](https://rancherdesktop.io/)
+- [Docker Hub](https://hub.docker.com/)
+- [Quay.io](https://quay.io/) (Red Hat container registry)
+
+
 ## Benchmark in Docker Environment
 
 ## Create your own environment
