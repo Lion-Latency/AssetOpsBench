@@ -13,7 +13,7 @@ from agent_hive.logger import get_custom_logger
 logger = get_custom_logger(__name__)
 
 
-class PlanningReviewWorkflow(Workflow):
+class NewPlanningWorkflow(Workflow):
     """
     Participant Template for Planning Review Workflow.
     ---------------------------------------------------
@@ -44,17 +44,6 @@ class PlanningReviewWorkflow(Workflow):
 
     def run(self, enable_summarization=False):
         generated_steps = self.generate_steps()
-
-        if enable_summarization:
-            from agent_hive.agents.summarization_agent import SummarizationAgent
-
-            summarization_task = Task(
-                description=self.tasks[0].description,
-                expected_output=self.tasks[0].expected_output,
-                agents=[SummarizationAgent(llm=self.llm)],
-                context=generated_steps[:],
-            )
-            generated_steps.append(summarization_task)
 
         sequential_workflow = SequentialWorkflow(
             tasks=generated_steps, context_type=ContextType.SELECTED
@@ -97,45 +86,14 @@ class PlanningReviewWorkflow(Workflow):
         # ✅ Only modify the section marked as TODO above
         # =========================================================
 
-        retry = 0
-        final_plan = ""
-        prev_plan = ""
-        prev_review = ""
-        while retry < self.max_retries:
-            try:
-                prompt = self.get_prompt(task.description, agent_descriptions, prev_plan, prev_review)
-                logger.info(f"Plan Generation Prompt: \n{prompt}")
-                llm_response = watsonx_llm(
-                    prompt, model_id=self.llm,
-                )["generated_text"]
-                logger.info(f"Plan {retry + 1}: \n{llm_response}")
+        prompt = self.get_prompt(task.description, agent_descriptions)
+        logger.info(f"Plan Generation Prompt: \n{prompt}")
+        llm_response = watsonx_llm(
+            prompt, model_id=self.llm,
+        )["generated_text"]
+        logger.info(f"Plan: \n{llm_response}")
 
-                plan_reviewer_agent = PlanReviewerAgent(llm=self.llm)
-                review = plan_reviewer_agent.execute_task(
-                    question=task.description,
-                    agent_descriptions=agent_descriptions,
-                    plan=llm_response,
-                )
-                prev_review = review
-                prev_plan = llm_response
-                logger.info(f"Plan Review: \n{review}")
-                if review["status"].lower() == "valid":
-                    logger.info(f"Plan {retry + 1} is valid.")
-                    final_plan = llm_response
-                    break
-                else:
-                    logger.info(f"Plan {retry + 1} is invalid.")
-                    retry += 1
-            except Exception as e:
-                logger.warning(f"Error during plan review: {e}. Retrying...")
-                retry += 1
-
-        if final_plan == "":
-            logger.info(
-                "No valid plan found after multiple retries. Use the plan from the last retry."
-            )
-            final_plan = prev_plan
-
+        final_plan = llm_response
         self.memory = []
 
         task_pattern = r"#Task\d+: (.+)"
@@ -194,27 +152,17 @@ class PlanningReviewWorkflow(Workflow):
             )
             planned_tasks.append(a_task)
 
+        logger.info(f"Planned Tasks: \n{planned_tasks}")
+
         return planned_tasks
 
-    def get_prompt(self, task_description, agent_descriptions, prev_plan, prev_review):
+    def get_prompt(self, task_description, agent_descriptions):
         # =========================================================
         # TODO: Participants can edit this section ONLY
         # 🎨 Purpose: Improve prompt clarity, formatting, emojis, guidance
         # ✅ Allowed: Wording, structure, examples, emojis
         # ❌ Not allowed: Changing workflow, ReAct agent, Executor, or memory logic
         # =========================================================
-
-        invalid_plan_description = ''
-        if prev_plan:
-            invalid_reason = prev_review['reasoning']
-            invalid_suggestions = prev_review['suggestions']
-            invalid_plan_description = f'''
-## Here is one invalid plan, please learn from it and do not repeat its mistakes: ##
-Invalid plan:
-{prev_plan}
-Reason why this plan is invalid: {invalid_reason}
-Suggestion for improvement: {invalid_suggestions}
-'''
 
         prompt = f"""
 🚀 You are an AI assistant tasked with creating a step-by-step plan to solve a complex problem using the external agents provided.  
@@ -237,8 +185,6 @@ Each step must follow this format:
 
 ## Problem to solve: ##
 {task_description}
-
-{invalid_plan_description}
 
 Output (your generated plan) ⬇️:
 """
