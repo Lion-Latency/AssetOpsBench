@@ -226,7 +226,7 @@ Now we run the following command,
 
 ```commandline
 cd /path/to/AssetOpsBench
-chmod +x benchmark/cods/entrypoint_track_1.sh
+chmod +x benchmark/cods_track1/entrypoint_track_1.sh
 docker-compose -f benchmark/docker-compose.yml up
 ```
 
