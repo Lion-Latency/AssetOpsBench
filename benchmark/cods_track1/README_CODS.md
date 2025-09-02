@@ -120,51 +120,65 @@ Here we use **GitHub Desktop** to illustrate the process.
 
 
 
+## 3. Docker Setup (Vendor‑Agnostic — Rancher Desktop as Example)
 
-## 3. Docker Setup (Rancher Desktop)
+You can use **any Docker‑compatible engine**. Popular choices include:
 
-We use **Rancher Desktop** for the Docker CLI and engine. Install it from [https://rancherdesktop.io](https://rancherdesktop.io).
+- **Docker Desktop** (macOS/Windows) — most common, easy setup.
+- **Rancher Desktop** (macOS/Windows/Linux) — open‑source; great Apple Silicon support. **We’ll use this as the example.**
+- **Colima** (macOS) — lightweight, Homebrew‑friendly.
+- **Podman / Podman Desktop** (Linux/macOS/Windows) — Docker‑compatible CLI via `podman`.
 
-### 3.1 Install & Configure
-1. Open **Rancher Desktop** → **Preferences**.  
-2. Go to **Virtual Machine → Emulation**:  
-   - **Virtual Machine Type**:  
-     - `VZ` (recommended on Apple Silicon) → uses the Apple Virtualization framework.  
-     - `QEMU` → software emulator (slower, only if VZ is unavailable).  
-   - **VZ Option**: enable **Rosetta support** to run amd64 (x86) Docker images on Apple Silicon.  
-3. Click **Apply**. Rancher Desktop will restart with the new settings.
+> **Tip:** Run **only one** engine at a time. If multiple are installed, whichever provides the `docker` CLI on your `PATH` will “win.”
 
-### 3.2 (Optional) Verify the Docker CLI
-You can check that the `docker` command is coming from Rancher Desktop.
+### 3.1 Choose, Install & (If Using Rancher Desktop) Configure
+1. **Pick one engine** above and install it.
+2. **If using Rancher Desktop** → **Preferences** → **Virtual Machine → Emulation**:
+   - **Virtual Machine Type**  
+     - `VZ` (recommended on Apple Silicon) → uses Apple’s Virtualization framework.  
+     - `QEMU` → software emulator (slower; use only if VZ is unavailable).  
+   - **VZ Options**: enable **Rosetta support** to run `amd64` (x86) Docker images on Apple Silicon.
+3. Click **Apply**. Rancher Desktop restarts with the new settings.
+
+### 3.2 Verify the Docker CLI
+Confirm that the `docker` command points to your chosen engine and the daemon is running:
 
 ```bash
-which docker
 docker version
+docker info
+docker context ls
+which docker
 ```
 
-**Expected path (example):**
+**Expected path (example for Rancher Desktop):**
 ```
 ~/.rd/bin/docker
 ```
-
 - On macOS this expands to `/Users/<your-username>/.rd/bin/docker`.  
-- On Linux it expands to `/home/<your-username>/.rd/bin/docker`.  
+- On Linux it often expands to `/home/<your-username>/.rd/bin/docker` (example).  
 
-If you see `/usr/local/bin/docker`, another Docker runtime (e.g., Docker Desktop) is active. Quit it and ensure Rancher Desktop is running.
+If you see `/usr/local/bin/docker`, another runtime (e.g., Docker Desktop) is active. Quit it and ensure your chosen engine is running.  
+If needed, switch contexts (examples):  
+```bash
+docker context use rancher-desktop   # Rancher Desktop
+docker context use default           # Docker Desktop
+docker context use colima            # Colima
+```
+
 
 ### 3.3 (If Kubernetes is On) Ensure Certificates Are Fresh
 If you enable Kubernetes in Rancher Desktop, its certificates can expire and block startup.
 
 **Quick checks:**
 ```bash
-kubectl version --short
+kubectl version
 kubectl get nodes
 kubectl cluster-info
 ```
 
 **If errors mention expired or invalid certificates:**
-- In Rancher Desktop: go to **Preferences → Kubernetes → Reset Kubernetes** (regenerates certificates).  
-- If problems persist: use **Preferences → Troubleshooting → Factory Reset** (removes images/containers and resets certificates).
+- In Rancher Desktop: **Preferences → Kubernetes → Reset Kubernetes** (regenerates certificates).  
+- If problems persist: **Preferences → Troubleshooting → Factory Reset** (removes images/containers and resets certificates).
 
 ---
 
@@ -236,11 +250,30 @@ You can use [.env](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/.env
 
 
 
-## 5. References
+## 5. Useful Links
 
-- [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench)
-- [Benchmark README](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/README.md)
-- [Rancher Desktop](https://rancherdesktop.io/)
-- [Docker Hub](https://hub.docker.com/)
-- [Quay.io](https://quay.io/) (Red Hat container registry)
+### Project
+- [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench) — Source code and issues.
+- [Benchmark README](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/README.md) — How to build and run the benchmark stack.
 
+### Container Engines (pick one)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — Official Docker engine + UI for macOS/Windows; simplest “it just works” option.
+- [Rancher Desktop](https://rancherdesktop.io/) — Open-source engine with Moby/containerd; good Apple Silicon support; optional built-in Kubernetes (k3s).
+- [Colima](https://github.com/abiosoft/colima) — Lightweight Docker-compatible runtime for macOS (via Lima); great for Homebrew users.
+- [Podman Desktop](https://podman-desktop.io/) — Docker-compatible CLI/UX with a daemonless engine; works on Linux/macOS/Windows.
+
+> Tip: Run **only one** engine at a time. If multiple are installed, whichever provides the `docker` CLI on your `PATH` will “win.”
+
+### (Optional) Local Kubernetes Runtimes
+If you want a local Kubernetes cluster (for `kubectl`), any of the below work:
+- [kind](https://kind.sigs.k8s.io/) — Runs Kubernetes “in Docker”; great for CI and quick clusters.
+- [minikube](https://minikube.sigs.k8s.io/) — Popular single-node local Kubernetes with many drivers.
+- [k3d](https://k3d.io/) — Runs lightweight k3s in Docker; very fast to start.
+
+### Image Registries
+- [Docker Hub](https://hub.docker.com/) — Default public image registry used by `docker pull`.
+- [Quay.io](https://quay.io/) — Red Hat/Quay container registry; often used for OSS and enterprise images.
+- [GitHub Container Registry (GHCR)](https://github.com/features/packages) — Stores images in GitHub under `ghcr.io/<owner>/<image>`.
+- [Amazon ECR](https://aws.amazon.com/ecr/) — Private registry integrated with AWS (IAM/permissions, ECS/EKS).
+- [Google Artifact Registry](https://cloud.google.com/artifact-registry) — GCP registry for Docker images and more (replaces GCR).
+- [Azure Container Registry](https://azure.microsoft.com/products/container-registry/) — Private registry integrated with Azure (AKS).
