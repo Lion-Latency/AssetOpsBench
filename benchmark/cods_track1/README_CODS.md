@@ -187,6 +187,7 @@ kubectl cluster-info
 Fill in your `.env` file with the following:
 
 ```env
+HF_APIKEY= <<Hugging face API key>>
 WATSONX_APIKEY=
 WATSONX_PROJECT_ID=
 WATSONX_URL=
@@ -204,6 +205,8 @@ OPENAI_API_KEY=
 
 ### Notes
 - For the **credential related to WATSONX**, please follow this [link](https://www.codabench.org/forums/10049/1449/) to gain the WATSONX.AI account request 
+- **Hugging Face API key**: Required to fetch utterances for this exercise.  
+  You can create one from your Hugging Face account [here](https://huggingface.co/settings/tokens).  
 - **Skyspark credentials**: Required but cal leave empty
 - **OpenAI API key**: Required but should leave as empty
 
