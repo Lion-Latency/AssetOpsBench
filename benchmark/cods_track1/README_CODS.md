@@ -243,22 +243,22 @@ docker-compose -f benchmark/docker-compose.yml up
 
 ## 7. Procedure for Submission
 
+
 1. Participant has to download the file named **`track1_planning.py`** in the `src/workflows` directory.  
    - This is the actual code where they will add the new logic.  
-   - **`run_track_1.py`** is the entrypoint; participants **do not** need to change it.
+   - **`run_track_1.py`** (located at `benchmark/cods_track1`) is the entrypoint; participants **do not** need to change it.
 
 2. Then, the last step is to run the **`docker-compose.yml`** file again.
 
-
-## Local Testing for the Submission File
+### Local Testing for the Submission File
 
 Local testing can be done once the environment variables are added.  
 Participants can check the execution of the workflow for any given **`utterance_id`** or **`scenario`**.
 
-### Option 1: Run Locally
+#### Option 1: Run Locally
 Run **`run_track_1.py`** file on the local machine.
 
-### Option 2: Modify Entrypoint
+#### Option 2: Modify Entrypoint
 In the **`entrypoint.sh`**, change the Python file name to your submission file:
 
 ```bash
