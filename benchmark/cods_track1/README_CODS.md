@@ -238,35 +238,7 @@ docker-compose -f benchmark/docker-compose.yml up
 
  Note that in `entrypoint.sh`, we activate the python environment by `conda activate assetopsbench` first.
 
-
-
-## 6. Procedure for Submission
-
-
-1. Participant has to modify the file named **`track1_planning.py`** in the `src/workflows` directory.  
-   - This is the actual code where they will add the new logic if there is a need.  
-   - **`run_track_1.py`** (located at `benchmark/cods_track1`) is the entrypoint; participants **do not** need to change it.
-
-2. Then, the last step is to run the **`docker-compose.yml`** file again.
-
-### Local Testing for the Submission File
-
-Local testing can be done once the environment variables are added.  
-Participants can check the execution of the workflow for any given **`utterance_id`** or **`scenario`**.
-
-#### Option 1: Run Locally
-Run **`run_track_1.py`** file on the local machine.
-
-#### Option 2: Modify Entrypoint
-In the **`entrypoint.sh`**, change the Python file name to your submission file:
-
-```bash
-python /home/your_file_name.py --utterance_ids utterance_id1, utterance_id2
-```
-
-
-
-## 7. Useful Links
+## 6. Useful Links
 
 ### Project
 - [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench) — Source code and issues.
