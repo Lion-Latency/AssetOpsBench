@@ -36,8 +36,7 @@ The repository contains multiple branches, but for this purpose you will only us
 ---
 
 ### Step 4 — Create the Fork
-1. On the top-right of the page, click the **Fork** button.  
-   ![fork-button](https://docs.github.com/assets/cb-30686/images/help/repository/fork_button.png)  
+1. On the top-right of the page, click the **Fork** button.
 
 2. On the fork setup page:  
    - Make sure your own GitHub account is selected as the destination.  
@@ -188,11 +187,6 @@ kubectl cluster-info
 Fill in your `.env` file with the following:
 
 ```env
-COUCHDB_USERNAME=admin
-COUCHDB_PASSWORD=password
-COUCHDB_DBNAME=chiller
-COUCHDB_URL=http://couchdb:5984/
-
 WATSONX_APIKEY=
 WATSONX_PROJECT_ID=
 WATSONX_URL=
@@ -226,15 +220,9 @@ We provide two base Docker images `quay.io/assetopsbench/assetopsbench-basic` an
 
 The python environment in both docker images use Conda to manage. The name of pre-built Conda environment is `assetopsbench`. For full list of installed packages, please refer to [basic_requirements.txt](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/basic_requirements.txt) and [extra_requirements.txt](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/extra_requirements.txt).
 
-### CouchDB Setup
-
-To streamline access to asset data during benchmarking, we use a Dockerized CouchDB instance. This setup allows for easy loading, querying, and management of benchmark datasets within a consistent environment.
-
-A sample [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/docker-compose.yml) is provided to help you start CouchDB locally with default configuration and credentials. We use [couchdb_setup.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/couchdb_setup.sh) as starting command to create a CouchDB database populating with a [sample Chiller dataset](https://github.com/IBM/AssetOpsBench/blob/main/src/assetopsbench/sample_data/chiller6_june2020_sensordata_couchdb.csv).
-
 
 ### Run Benchmark Script
-In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/docker-compose.yml), we mount the benchmark scripts ([entrypoint.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/entrypoint.sh) and [run_plan_execute.py](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/run_plan_execute.py) and scenario files as volumes to assetopsbench container.
+In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/cods_track1/docker-compose.yml), we mount the benchmark scripts ([entrypoint.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/entrypoint.sh) and [run_plan_execute.py](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/run_plan_execute.py) and scenario files as volumes to assetopsbench container.
 
 Now we run the following command,
 
