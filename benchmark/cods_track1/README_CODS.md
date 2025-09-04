@@ -184,6 +184,8 @@ kubectl cluster-info
 
 ## 4. Environment Variables
 
+You can use [.env](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
+
 Fill in your `.env` file with the following:
 
 ```env
@@ -225,17 +227,15 @@ The python environment in both docker images use Conda to manage. The name of pr
 
 
 ### Run Benchmark Script
-In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/cods_track1/docker-compose.yml), we mount the benchmark scripts ([entrypoint.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/entrypoint.sh) and [run_plan_execute.py](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/run_plan_execute.py) and scenario files as volumes to assetopsbench container.
+In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/cods_track1/docker-compose.yml), we mount the benchmark scripts ([entrypoint.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/cods_track1/entrypoint.sh) and [run_plan_execute.py](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/cods_track1/run_plan_execute.py) and scenario files as volumes to assetopsbench container.
 
 Now we run the following command,
 
 ```commandline
 cd /path/to/AssetOpsBench
-chmod +x benchmark/cods_track1/entrypoint_track_1.sh
+chmod +x benchmark/cods_track1/entrypoint.sh
 docker-compose -f benchmark/docker-compose.yml up
 ```
-
-You can use [.env](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
 
  Note that in `entrypoint.sh`, we activate the python environment by `conda activate assetopsbench` first.
 
