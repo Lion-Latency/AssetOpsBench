@@ -5,7 +5,7 @@ This guide describes how to fork, configure, and run the **AssetOpsBench** proje
 
 ---
 
-## Fork to Your Own Project
+## 1. Fork to Your Own Project
 
 This guide shows how to create your own copy of the **IBM/AssetOpsBench** project on GitHub, using only the web browser.  
 A fork lets you experiment and make changes without affecting the original project.
@@ -36,8 +36,7 @@ The repository contains multiple branches, but for this purpose you will only us
 ---
 
 ### Step 4 — Create the Fork
-1. On the top-right of the page, click the **Fork** button.  
-   ![fork-button](https://docs.github.com/assets/cb-30686/images/help/repository/fork_button.png)  
+1. On the top-right of the page, click the **Fork** button.
 
 2. On the fork setup page:  
    - Make sure your own GitHub account is selected as the destination.  
@@ -54,8 +53,7 @@ The repository contains multiple branches, but for this purpose you will only us
    👉 `https://github.com/<your-username>/AssetOpsBench`
 
 2. Open the **Branch dropdown menu** (upper-left, just above the file list).  
-   ![branch-dropdown](https://docs.github.com/assets/cb-33248/images/help/branch/branch-dropdown.png)
-
+   
 3. Select **`Competition_CODS`** from the list.  
    - This switches your forked repository view to the competition branch.  
 
@@ -120,65 +118,77 @@ Here we use **GitHub Desktop** to illustrate the process.
 
 
 
+## 3. Docker Setup (Vendor‑Agnostic — Rancher Desktop as Example)
 
-## 3. Docker Setup (Rancher Desktop)
+You can use **any Docker‑compatible engine**. Popular choices include:
 
-We use **Rancher Desktop** for the Docker CLI and engine. Install it from [https://rancherdesktop.io](https://rancherdesktop.io).
+- **Docker Desktop** (macOS/Windows) — most common, easy setup.
+- **Rancher Desktop** (macOS/Windows/Linux) — open‑source; great Apple Silicon support. **We’ll use this as the example.**
+- **Colima** (macOS) — lightweight, Homebrew‑friendly.
+- **Podman / Podman Desktop** (Linux/macOS/Windows) — Docker‑compatible CLI via `podman`.
 
-### 3.1 Install & Configure
-1. Open **Rancher Desktop** → **Preferences**.  
-2. Go to **Virtual Machine → Emulation**:  
-   - **Virtual Machine Type**:  
-     - `VZ` (recommended on Apple Silicon) → uses the Apple Virtualization framework.  
-     - `QEMU` → software emulator (slower, only if VZ is unavailable).  
-   - **VZ Option**: enable **Rosetta support** to run amd64 (x86) Docker images on Apple Silicon.  
-3. Click **Apply**. Rancher Desktop will restart with the new settings.
+> **Tip:** Run **only one** engine at a time. If multiple are installed, whichever provides the `docker` CLI on your `PATH` will “win.”
 
-### 3.2 (Optional) Verify the Docker CLI
-You can check that the `docker` command is coming from Rancher Desktop.
+### 3.1 Choose, Install & (If Using Rancher Desktop) Configure
+1. **Pick one engine** above and install it.
+2. **If using Rancher Desktop** → **Preferences** → **Virtual Machine → Emulation**:
+   - **Virtual Machine Type**  
+     - `VZ` (recommended on Apple Silicon) → uses Apple’s Virtualization framework.  
+     - `QEMU` → software emulator (slower; use only if VZ is unavailable).  
+   - **VZ Options**: enable **Rosetta support** to run `amd64` (x86) Docker images on Apple Silicon.
+3. Click **Apply**. Rancher Desktop restarts with the new settings.
+
+### 3.2 Verify the Docker CLI
+Confirm that the `docker` command points to your chosen engine and the daemon is running:
 
 ```bash
-which docker
 docker version
+docker info
+docker context ls
+which docker
 ```
 
-**Expected path (example):**
+**Expected path (example for Rancher Desktop):**
 ```
 ~/.rd/bin/docker
 ```
-
 - On macOS this expands to `/Users/<your-username>/.rd/bin/docker`.  
-- On Linux it expands to `/home/<your-username>/.rd/bin/docker`.  
+- On Linux it often expands to `/home/<your-username>/.rd/bin/docker` (example).  
 
-If you see `/usr/local/bin/docker`, another Docker runtime (e.g., Docker Desktop) is active. Quit it and ensure Rancher Desktop is running.
+If you see `/usr/local/bin/docker`, another runtime (e.g., Docker Desktop) is active. Quit it and ensure your chosen engine is running.  
+If needed, switch contexts (examples):  
+```bash
+docker context use rancher-desktop   # Rancher Desktop
+docker context use default           # Docker Desktop
+docker context use colima            # Colima
+```
+
 
 ### 3.3 (If Kubernetes is On) Ensure Certificates Are Fresh
 If you enable Kubernetes in Rancher Desktop, its certificates can expire and block startup.
 
 **Quick checks:**
 ```bash
-kubectl version --short
+kubectl version
 kubectl get nodes
 kubectl cluster-info
 ```
 
 **If errors mention expired or invalid certificates:**
-- In Rancher Desktop: go to **Preferences → Kubernetes → Reset Kubernetes** (regenerates certificates).  
-- If problems persist: use **Preferences → Troubleshooting → Factory Reset** (removes images/containers and resets certificates).
+- In Rancher Desktop: **Preferences → Kubernetes → Reset Kubernetes** (regenerates certificates).  
+- If problems persist: **Preferences → Troubleshooting → Factory Reset** (removes images/containers and resets certificates).
 
 ---
 
 
 ## 4. Environment Variables
 
+You can use [.env](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
+
 Fill in your `.env` file with the following:
 
 ```env
-COUCHDB_USERNAME=admin
-COUCHDB_PASSWORD=password
-COUCHDB_DBNAME=chiller
-COUCHDB_URL=http://couchdb:5984/
-
+HF_APIKEY= <<Hugging face API key>>
 WATSONX_APIKEY=
 WATSONX_PROJECT_ID=
 WATSONX_URL=
@@ -196,13 +206,15 @@ OPENAI_API_KEY=
 
 ### Notes
 - For the **credential related to WATSONX**, please follow this [link](https://www.codabench.org/forums/10049/1449/) to gain the WATSONX.AI account request 
+- **Hugging Face API key**: Required to fetch utterances for this exercise.  
+  You can create one from your Hugging Face account [here](https://huggingface.co/join).  
 - **Skyspark credentials**: Required but cal leave empty
 - **OpenAI API key**: Required but should leave as empty
 
 ---
 
 
-## 4. Build and Run
+## 5. Build and Run
 
 
 ### Pre-built Docker Images
@@ -212,35 +224,44 @@ We provide two base Docker images `quay.io/assetopsbench/assetopsbench-basic` an
 
 The python environment in both docker images use Conda to manage. The name of pre-built Conda environment is `assetopsbench`. For full list of installed packages, please refer to [basic_requirements.txt](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/basic_requirements.txt) and [extra_requirements.txt](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/extra_requirements.txt).
 
-### CouchDB Setup
-
-To streamline access to asset data during benchmarking, we use a Dockerized CouchDB instance. This setup allows for easy loading, querying, and management of benchmark datasets within a consistent environment.
-
-A sample [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/docker-compose.yml) is provided to help you start CouchDB locally with default configuration and credentials. We use [couchdb_setup.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/couchdb_setup.sh) as starting command to create a CouchDB database populating with a [sample Chiller dataset](https://github.com/IBM/AssetOpsBench/blob/main/src/assetopsbench/sample_data/chiller6_june2020_sensordata_couchdb.csv).
-
 
 ### Run Benchmark Script
-In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/docker-compose.yml), we mount the benchmark scripts ([entrypoint.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/entrypoint.sh) and [run_plan_execute.py](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/run_plan_execute.py) and scenario files as volumes to assetopsbench container.
+In [docker-compose.yml](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/cods_track1/docker-compose.yml), we mount the benchmark scripts ([entrypoint.sh](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/cods_track1/entrypoint.sh) and [run_plan_execute.py](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/cods_track1/run_plan_execute.py) and scenario files as volumes to assetopsbench container.
 
 Now we run the following command,
 
 ```commandline
 cd /path/to/AssetOpsBench
-chmod +x benchmark/cods_track1/entrypoint_track_1.sh
+chmod +x benchmark/cods_track1/entrypoint.sh
 docker-compose -f benchmark/docker-compose.yml up
 ```
 
-You can use [.env](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
-
  Note that in `entrypoint.sh`, we activate the python environment by `conda activate assetopsbench` first.
 
+## 6. Useful Links
 
+### Project
+- [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench) — Source code and issues.
+- [Benchmark README](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/README.md) — How to build and run the benchmark stack.
 
-## 5. References
+### Container Engines (pick one)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — Official Docker engine + UI for macOS/Windows; simplest “it just works” option.
+- [Rancher Desktop](https://rancherdesktop.io/) — Open-source engine with Moby/containerd; good Apple Silicon support; optional built-in Kubernetes (k3s).
+- [Colima](https://github.com/abiosoft/colima) — Lightweight Docker-compatible runtime for macOS (via Lima); great for Homebrew users.
+- [Podman Desktop](https://podman-desktop.io/) — Docker-compatible CLI/UX with a daemonless engine; works on Linux/macOS/Windows.
 
-- [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench)
-- [Benchmark README](https://github.com/IBM/AssetOpsBench/blob/main/benchmark/README.md)
-- [Rancher Desktop](https://rancherdesktop.io/)
-- [Docker Hub](https://hub.docker.com/)
-- [Quay.io](https://quay.io/) (Red Hat container registry)
+> Tip: Run **only one** engine at a time. If multiple are installed, whichever provides the `docker` CLI on your `PATH` will “win.”
 
+### (Optional) Local Kubernetes Runtimes
+If you want a local Kubernetes cluster (for `kubectl`), any of the below work:
+- [kind](https://kind.sigs.k8s.io/) — Runs Kubernetes “in Docker”; great for CI and quick clusters.
+- [minikube](https://minikube.sigs.k8s.io/) — Popular single-node local Kubernetes with many drivers.
+- [k3d](https://k3d.io/) — Runs lightweight k3s in Docker; very fast to start.
+
+### Image Registries
+- [Docker Hub](https://hub.docker.com/) — Default public image registry used by `docker pull`.
+- [Quay.io](https://quay.io/) — Red Hat/Quay container registry; often used for OSS and enterprise images.
+- [GitHub Container Registry (GHCR)](https://github.com/features/packages) — Stores images in GitHub under `ghcr.io/<owner>/<image>`.
+- [Amazon ECR](https://aws.amazon.com/ecr/) — Private registry integrated with AWS (IAM/permissions, ECS/EKS).
+- [Google Artifact Registry](https://cloud.google.com/artifact-registry) — GCP registry for Docker images and more (replaces GCR).
+- [Azure Container Registry](https://azure.microsoft.com/products/container-registry/) — Private registry integrated with Azure (AKS).
