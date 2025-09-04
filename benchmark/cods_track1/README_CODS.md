@@ -5,7 +5,7 @@ This guide describes how to fork, configure, and run the **AssetOpsBench** proje
 
 ---
 
-## Fork to Your Own Project
+## 1. Fork to Your Own Project
 
 This guide shows how to create your own copy of the **IBM/AssetOpsBench** project on GitHub, using only the web browser.  
 A fork lets you experiment and make changes without affecting the original project.
@@ -53,8 +53,7 @@ The repository contains multiple branches, but for this purpose you will only us
    👉 `https://github.com/<your-username>/AssetOpsBench`
 
 2. Open the **Branch dropdown menu** (upper-left, just above the file list).  
-   ![branch-dropdown](https://docs.github.com/assets/cb-33248/images/help/branch/branch-dropdown.png)
-
+   
 3. Select **`Competition_CODS`** from the list.  
    - This switches your forked repository view to the competition branch.  
 
@@ -215,7 +214,7 @@ OPENAI_API_KEY=
 ---
 
 
-## 4. Build and Run
+## 5. Build and Run
 
 
 ### Pre-built Docker Images
@@ -241,7 +240,7 @@ docker-compose -f benchmark/docker-compose.yml up
 
 
 
-## 7. Procedure for Submission
+## 6. Procedure for Submission
 
 
 1. Participant has to modify the file named **`track1_planning.py`** in the `src/workflows` directory.  
@@ -267,7 +266,7 @@ python /home/your_file_name.py --utterance_ids utterance_id1, utterance_id2
 
 
 
-## 6. Useful Links
+## 7. Useful Links
 
 ### Project
 - [AssetOpsBench GitHub](https://github.com/IBM/AssetOpsBench) — Source code and issues.
