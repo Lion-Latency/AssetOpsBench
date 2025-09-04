@@ -244,8 +244,8 @@ docker-compose -f benchmark/docker-compose.yml up
 ## 7. Procedure for Submission
 
 
-1. Participant has to download the file named **`track1_planning.py`** in the `src/workflows` directory.  
-   - This is the actual code where they will add the new logic.  
+1. Participant has to modify the file named **`track1_planning.py`** in the `src/workflows` directory.  
+   - This is the actual code where they will add the new logic if there is a need.  
    - **`run_track_1.py`** (located at `benchmark/cods_track1`) is the entrypoint; participants **do not** need to change it.
 
 2. Then, the last step is to run the **`docker-compose.yml`** file again.
