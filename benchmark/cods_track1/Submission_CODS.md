@@ -27,49 +27,60 @@ Refer to the [README_CODS.md](https://github.com/IBM/AssetOpsBench/blob/Competit
 
 
 
-## 1. Understanding the Track 1 Competion
+## 1. Access the Track 1 Competition  
 
-### Access CodaBench Competition Page
+### Access the CodaBench AssetOpsBench — Track 1 Page  
 
-1. Go to the website of Codabench
-
-   👉 [https://www.codabench.org/]  
+1. Open the CodaBench website:  
+   👉 [https://www.codabench.org/](https://www.codabench.org/)  
 
 2. Log in with your account credentials.  
 
-3. Navigate to the **AssetOpsBench Competition page**:  
-   👉 [https://www.codabench.org/competitions/10206]  
+3. Navigate to the **AssetOpsBench Competition** page:  
+   👉 [https://www.codabench.org/competitions/10206](https://www.codabench.org/competitions/10206)  
 
-4. At the left side, click under the Started of the link for Track 1: Planning
+4. In the left-hand menu, under **Get Started**, click **Track 1: Task Planning**.  
+   
+---
 
-   []: 
+## 2. Understand Your Competition – Track 1  
 
-    
-
-
+- The challenge is about **better planning prompts** — all teams use the same fixed agents, ReAct agent, and Executor.  
+- For **local testing**, you can use the baseline scaffold in **[`planning_review.py`](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/src/agent_hive/workflows/planning_review.py)**.  
+  - Local path after cloning: `src/agent_hive/workflows/planning_review.py`  
+  - This file lets you **practice and debug locally** with a few sample scenarios.  
+  - It shows you what kind of output a planning prompt produces and helps verify your setup.  
+  - It is **not submitted** — only for local testing.  
+- For the **official submission**, you must edit **[`track1_planning.py`](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/src/agent_hive/workflows/track1_planning.py)**.  
+  - Local path after cloning: `src/agent_hive/workflows/track1_planning.py`  
+  - Only the marked **TODO** section can be modified to improve how agent information is collected and formatted.  
+- Submissions are evaluated with **LLaMA-3-70B** on public scenarios (Phase 1) and unseen scenarios (Phase 2); final scores combine **task accomplishment** and **generalization**.  
 
 ---
 
+## 3. What Need to Do
 
-## 2. Local Testing (Optional but Recommended)
-Before submitting, you can test your code locally to ensure it runs as expected.
+There are **two TODO sections** in `src/agent_hive/workflows/track1_planning.py`:
 
-1. Add required **environment variables** to your system (API keys, credentials, etc.).  
-2. Run the workflow using the provided script. For example:  
+1. **Scenario 1 – Agent Info Formatting**  
+   - **Where:** `generate_steps()` (lines 59–82)  
+   - **Allowed:**  
+     - Change numbering style or bullet points  
+     - Include additional metadata (e.g., agent capabilities, tags)  
+     - Provide examples in a different format  
+     - Add emojis or formatting to make the prompt clearer  
+     - More thinking  
 
-   ```bash
-   python run_track_1.py --utterance_ids <utterance_id1>,<utterance_id2>
-   ```
+2. **Scenario 2 – Prompt Template**  
+   - **Where:** `get_prompt()` (lines 161–191)  
+   - **Allowed:**  
+     - Wording  
+     - Structure  
+     - Examples  
+     - Emojis  
 
-3. Alternatively, edit **`entrypoint.sh`** to point to your script and run locally:  
-
-   ```bash
-   python /home/your_file_name.py --utterance_ids 108
-   ```
-
-This will help confirm that your code executes correctly before submission.
-
----
+👉 To find them quickly, search in the file for:  
+	TODO: Participants can edit this section ONLY
 
 ## 1. Prepare Your Submission
 1. Package your solution as a **ZIP file**.  
@@ -78,11 +89,17 @@ This will help confirm that your code executes correctly before submission.
 
 ---
 
-## 4. Final Submission
-1. On the competition page, go to **“My Submissions.”**  
-2. Click **“Submit”** → **“Upload.”**  
-3. Select your prepared **ZIP file.**  
-4. Confirm the upload.  
+## Final Submission
+
+1. Go to the [AssetOpsBench Competition page](https://www.codabench.org/competitions/10206).  
+2. Click on the **“My Submissions”** tab or go directly to [this link](https://www.codabench.org/competitions/10206/#/participate-tab).  
+3. Under **Submission upload**, make sure the **Track** is set to **Task Planning**.  
+4. In **Submit as**, choose **Yourself** (or your team name if applicable).  
+5. Click the **paperclip icon** to select and upload your prepared **ZIP file**.  
+6. Once uploaded, press **Submit** to confirm.  
+
+✅ You can make up to **100 submissions per day** (as shown on the page).  
+
 
 ---
 
