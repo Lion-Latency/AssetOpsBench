@@ -110,9 +110,33 @@ For Track 1, use the provided Docker Compose file under `benchmark/code_track1/`
 ---
 
 ## 5. Prepare Your Submission
+
 1. Package your solution as a **ZIP file**.  
-   - Ensure the ZIP contains all required files (e.g., your Python scripts, configuration files, and any dependencies as specified in the task instructions).  
-   - Double-check that your main script matches the expected entrypoint.  
+   - For Track 1, this means exactly **two files**:
+     - **track1_planning.py**  
+       - Path:  
+         ```
+         src/agent_hive/workflows/track1_planning.py
+         ```
+       - This is the main workflow file you modified (only edit the section marked with `# TODO`).
+     - **track1_fact_sheet.json**  
+       - Path:  
+         ```
+         src/agent_hive/workflows/track1_fact_sheet.json
+         ```
+       - Originally named `task_planning_fact_sheet.json`.  
+         Rename it once to `track1_fact_sheet.json` before submission.  
+         Do **not** modify its contents.
+
+2. **Important rule**:  
+   - No new files should be created.  
+   - No file names can be changed  
+
+3. Create the ZIP archive from your local project root:  
+   ```bash
+   cd src/agent_hive/workflows
+   zip submission_track1.zip track1_planning.py track1_fact_sheet.json
+
 
 ---
 
