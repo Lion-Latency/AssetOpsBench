@@ -82,14 +82,41 @@ There are **two TODO sections** in `src/agent_hive/workflows/track1_planning.py`
 👉 To find them quickly, search in the file for:  
 	TODO: Participants can edit this section ONLY
 
-## 1. Prepare Your Submission
+## 4. Local Test Before Submission
+
+Before creating your submission, you should verify that your code runs correctly in a local environment.  
+For Track 1, use the provided Docker Compose file under `benchmark/code_track1/`.
+
+### Steps
+
+1. **Run with Docker (Track 1)**
+   ```bash
+   docker-compose -f benchmark/code_track1/docker-compose.yml up
+
+- This will start the competition environment and run your modified Track 1 workflow (`track1_planning.py`).
+
+2. **Check the Logs**
+- Watch the Docker terminal output.  
+- Confirm that the service starts without errors.  
+- **Tracking TO-DO changes**: any edits you make in the `# TODO` section of `track1_planning.py` will be picked up when the container runs.  
+  - For debugging, add `print()` or `logger.info()` statements inside your changes.  
+  - These messages will appear directly in the console output, confirming that your modifications are active.
+
+3. **Iterate if Needed**
+- If you modify code (e.g., `track1_planning.py`), stop the container and restart with the same command.  
+- Repeat until the workflow runs smoothly and your changes display as expected.
+
+
+---
+
+## 5. Prepare Your Submission
 1. Package your solution as a **ZIP file**.  
    - Ensure the ZIP contains all required files (e.g., your Python scripts, configuration files, and any dependencies as specified in the task instructions).  
    - Double-check that your main script matches the expected entrypoint.  
 
 ---
 
-## Final Submission
+## 6. Final Submission
 
 1. Go to the [AssetOpsBench Competition page](https://www.codabench.org/competitions/10206).  
 2. Click on the **“My Submissions”** tab or go directly to [this link](https://www.codabench.org/competitions/10206/#/participate-tab).  
@@ -101,12 +128,11 @@ There are **two TODO sections** in `src/agent_hive/workflows/track1_planning.py`
 ✅ You can make up to **100 submissions per day** (as shown on the page).  
 
 
----
 
-## 5. After Submission
-- Your job will automatically be placed in the competition pool; you do **not** need to create a new pool.  
-- Once uploaded, the system will execute your submission.  
-- Track the progress and results on the **My Submissions** page.  
+## 7. After Submission
+- Your job is automatically added to the competition pool — you do **not** need to create one manually.  
+- After upload, the system will run your submission automatically.  
+- You can track execution progress and view results on the **[My Submissions](https://www.codabench.org/competitions/10206/#/participate-tab)** page.  
 
 ---
 
