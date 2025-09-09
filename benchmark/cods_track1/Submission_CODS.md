@@ -46,11 +46,6 @@ Refer to the [README_CODS.md](https://github.com/IBM/AssetOpsBench/blob/Competit
 ## 2. Understand Your Competition – Track 1  
 
 - The challenge is about **better planning prompts** — all teams use the same fixed agents, ReAct agent, and Executor.  
-- For **local testing**, you can use the baseline scaffold in **[`planning_review.py`](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/src/agent_hive/workflows/planning_review.py)**.  
-  - Local path after cloning: `src/agent_hive/workflows/planning_review.py`  
-  - This file lets you **practice and debug locally** with a few sample scenarios.  
-  - It shows you what kind of output a planning prompt produces and helps verify your setup.  
-  - It is **not submitted** — only for local testing.  
 - For the **official submission**, you must edit **[`track1_planning.py`](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/src/agent_hive/workflows/track1_planning.py)**.  
   - Local path after cloning: `src/agent_hive/workflows/track1_planning.py`  
   - Only the marked **TODO** section can be modified to improve how agent information is collected and formatted.  
@@ -85,13 +80,13 @@ There are **two TODO sections** in `src/agent_hive/workflows/track1_planning.py`
 ## 4. Local Test Before Submission
 
 Before creating your submission, you should verify that your code runs correctly in a local environment.  
-For Track 1, use the provided Docker Compose file under `benchmark/code_track1/`.
+For Track 1, use the provided Docker Compose file under `benchmark/cods_track1/`.
 
 ### Steps
 
 1. **Run with Docker (Track 1)**
    ```bash
-   docker-compose -f benchmark/code_track1/docker-compose.yml up
+   docker-compose -f benchmark/cods_track1/docker-compose.yml up
 
 - This will start the competition environment and run your modified Track 1 workflow (`track1_planning.py`).
 
