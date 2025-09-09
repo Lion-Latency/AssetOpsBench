@@ -144,7 +144,7 @@ For Track 1, use the provided Docker Compose file under `benchmark/cods_track1/`
 5. Click the **paperclip icon** to select and upload your prepared **ZIP file**.  
 6. Once uploaded, press **Submit** to confirm.  
 
-✅ You can make up to **100 submissions per day** (as shown on the page).  
+✅ You can make up to **2 submissions per day** (as shown on the page).  
 
 
 
