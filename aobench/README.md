@@ -34,4 +34,4 @@ aobench
 
 The top level compose file spins up all the required services for the benchmark to function. The following diagram illustrates an instantiated benchmark instance.
 
-![aobench architecture](doc/arch_ao.png)
+<p align=center><img src="doc/arch_ao.png" width=50% height=50%></p>
