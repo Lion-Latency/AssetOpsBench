@@ -1,0 +1,4 @@
+FROM postgres:17.6
+COPY data/ /tmp
+COPY db/eamlite.sql /docker-entrypoint-initdb.d/
+COPY db/etl.sql /docker-entrypoint-initdb.d/
