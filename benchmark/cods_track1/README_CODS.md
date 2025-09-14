@@ -185,7 +185,7 @@ kubectl cluster-info
 
 You can use [.env](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
 
-Fill in your `.env` file with the following:
+Fill in your `.env` file with the following (Please see Notes, you do not need all the value to be filled.):
 
 ```env
 HF_APIKEY= <<Hugging face API key>>
