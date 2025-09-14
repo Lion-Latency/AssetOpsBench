@@ -27,6 +27,7 @@ def failure_mode_reduction(
     if verbose:
         print(f"Loading combined pickle: {combined_pickle_path}")
     df = pd.read_pickle(combined_pickle_path)
+    print (df)
 
     # --- Step 3: explode addi_fm_list -> title/description ---
     if verbose:

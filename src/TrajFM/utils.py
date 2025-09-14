@@ -11,14 +11,17 @@ def get_llm_answer_from_json(data: dict, model_id) -> str:
     """
     try:
         trajectory = data.get("trajectory", [])
-        question = data.get("task", "[No question provided]")
-        final_answer = data.get("final_answer", "[No final answer provided]")
+        question = data.get("text", "[No question provided]")
+        if len(trajectory) > 0:
+            final_answer = trajectory[-1].get('final_answer', "[No final answer provided]")
+        else:
+            final_answer = "[No final answer provided]"
 
         formatted_steps = [f"Question: {question}"]
         for idx, step in enumerate(trajectory, 1):
-            thought = step.get("thought", "[No thought]")
-            action = step.get("action", "[No action]")
-            observation = step.get("observation", "[No observation]")
+            thought = step.get("task_description", "[No thought]")
+            action = step.get("agent_name", "[No action]")
+            observation = step.get("response", "[No observation]")
 
             step_text = (
                 f"Thought {idx}: {thought}\n"

@@ -12,14 +12,13 @@ def _load_all_json_files(root_path: str) -> Dict[str, Any]:
     json_data: Dict[str, Any] = {}
     for dirpath, _, filenames in os.walk(root_path):
         for filename in filenames:
-            if filename.isdigit():
-                file_path = os.path.join(dirpath, filename)
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        json_data[file_path] = data
-                except Exception:
-                    pass
+            file_path = os.path.join(dirpath, filename)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    json_data[file_path] = data
+            except Exception:
+                pass
     return json_data
 
 
@@ -46,18 +45,6 @@ def process_trajectories(
 
     If `timestamps` is None, auto-discovers subfolders in `traj_root_base` and uses them as timestamps.
     """
-    # Auto-discover timestamps if not provided
-    if timestamps is None:
-        if not os.path.isdir(traj_root_base):
-            raise NotADirectoryError(f"traj_root_base does not exist: {traj_root_base}")
-        timestamps = sorted(
-            d
-            for d in os.listdir(traj_root_base)
-            if os.path.isdir(os.path.join(traj_root_base, d))
-        )
-        print(
-            f"Discovered {len(timestamps)} timestamps under {traj_root_base}: {timestamps}"
-        )
 
     failure_mode_keys = [
         "1.1 Disobey Task Specification",
@@ -81,32 +68,35 @@ def process_trajectories(
     per_timestamp_paths: List[str] = []
     all_dfs: List[pd.DataFrame] = []
 
-    for timestamp in timestamps:
-        print(f"\nProcessing timestamp {timestamp}")
-        root_directory = f"{traj_root_base}/{timestamp}"
-        all_jsons = _load_all_json_files(root_directory)
-        print(f"  Loaded {len(all_jsons)} files")
+    timestamp = '1'
+    print(f"\nProcessing timestamp {timestamp}")
+    root_directory = f"{traj_root_base}"
+    all_jsons = _load_all_json_files(root_directory)
+    print(f"  Loaded {len(all_jsons)} files")
 
-        df_columns = [
-            "model_id",
-            "counter",
-            "timestamp",
-            "vendor",
-            "model",
-            "ut_id",
-            "addi_fm_cnt",
-            "addi_fm_list",
-        ] + failure_mode_keys
-        df = pd.DataFrame(columns=df_columns)
+    df_columns = [
+        "model_id",
+        "counter",
+        "timestamp",
+        "vendor",
+        "model",
+        "ut_id",
+        "addi_fm_cnt",
+        "addi_fm_list",
+    ] + failure_mode_keys
+    df = pd.DataFrame(columns=df_columns)
 
-        counter = 1
-        for path, content in all_jsons.items():
-            parts = os.path.relpath(path, root_directory).split(os.sep)
-            if len(parts) < 3:
-                print(f"  Skipping malformed path: {path}")
-                continue
-            vendor, model, ut_id = parts[:3]
+    counter = 1
+    for path, content in all_jsons.items():
+        parts = os.path.relpath(path, root_directory).split('_')
+        ut_id = parts[0]
+        model = model_id
+        vendor = ''
 
+        max_trial = 2
+        cur_trial = 0
+        while cur_trial < max_trial:
+            cur_trial = cur_trial + 1
             try:
                 raw_output = get_llm_answer_from_json(data=content, model_id=model_id)
                 response_text = raw_output["generated_text"]
@@ -131,10 +121,11 @@ def process_trajectories(
                     row[key] = bool(failure_modes.get(key, False))
 
                 df.loc[len(df)] = row
+                break
             except Exception as e:
                 print(f"  Failed to process {path}: {e}")
 
-            counter += 1
+        counter += 1
 
         df_file_path = f"{out_dir}/{timestamp}_m{model_id}_db.pkl"
         df.to_pickle(df_file_path)
