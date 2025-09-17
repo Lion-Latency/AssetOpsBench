@@ -11,7 +11,8 @@ The main aspects of the architecture iteration are:
 4. Agents and tools should eventually be provided as A2A and MCP servers. This change should make it easier for developers of new agents to use agents already available on the bench.  
 5. Servers comprising part of AssetOpsBench should be started with `podman compose up` or similar.    
 
-The figure below shows the main elements. 
+
+The figure below shows the main elements. The dev plan would be to introduce these elements one at a time.
 
 <p align=center><img src="doc/arch_ao.png" width=50% height=50%></p>
 
