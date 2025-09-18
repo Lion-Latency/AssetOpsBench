@@ -1,32 +1,60 @@
 import datetime
 import decimal
-from typing import Any, List, Optional, Type
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import and_, or_
-from sqlmodel import Session, SQLModel, select
+from typing import Any, List, Optional, Type, get_args, get_origin
 
 from database import get_session
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field, create_model
+from sqlalchemy.orm import Mapped
+from sqlalchemy.sql.sqltypes import (Boolean, Date, Float, Integer, Numeric,
+                                     String)
+from sqlmodel import Session, SQLModel, select
 
 
-def generate_filter_model(model: type[SQLModel]) -> type[BaseModel]:
-    """Create a Pydantic model for all columns to use as query params."""
+def sqlalchemy_type_to_python(sa_type):
+    """Map SQLAlchemy column types to Python types for Pydantic."""
+    if isinstance(sa_type, Integer):
+        return int
+    if isinstance(sa_type, String):
+        return str
+    if isinstance(sa_type, Float):
+        return float
+    if isinstance(sa_type, Boolean):
+        return bool
+    if isinstance(sa_type, Numeric):
+        return decimal.Decimal
+    if isinstance(sa_type, Date):
+        return datetime.date
+    return str  # fallback to string if unknown
+
+
+def generate_filter_model(model: type[SQLModel]):
+    """Generate a Pydantic model with *optional* query parameters for filtering."""
     fields = {}
-    for field_name, annotation in model.__annotations__.items():
-        # Make all fields optional for filtering
-        fields[field_name] = (Optional[annotation], None)
-        # Also support operators
-        if annotation in [int, float, decimal.Decimal, datetime.date, str]:
-            for op in ["__gte", "__lte", "__gt", "__lt", "__ne", "__icontains"]:
-                fields[f"{field_name}{op}"] = (Optional[annotation], None)
 
-    FilterModel = type(f"{model.__name__}Filter", (BaseModel,), fields)
+    for column in model.__table__.columns:
+        py_type = sqlalchemy_type_to_python(column.type)
+
+        # Make every filter param optional, regardless of nullable status
+        # (because a filter can always be omitted)
+        optional_type = Optional[py_type]
+
+        # Use Field(default=None) so Pydantic doesn't require it
+        fields[column.name] = (
+            optional_type,
+            Field(default=None, description=f"Filter by {column.name}"),
+        )
+
+    FilterModel = create_model(
+        f"{model.__name__}Filter",
+        __base__=BaseModel,
+        **fields,
+    )
+    FilterModel.model_config = ConfigDict(extra="ignore")
     return FilterModel
 
 
 def convert_value(value: str, target_type: Any):
-    """Convert query string values to the correct field type."""
     try:
         if target_type == int:
             return int(value)
@@ -47,6 +75,8 @@ def create_crud_router(model: Type[SQLModel]) -> APIRouter:
     router = APIRouter()
     model_name = model.__name__
 
+    FilterModel = generate_filter_model(model)
+
     # Create
     @router.post("/", response_model=model)
     def create(item: model, session: Session = Depends(get_session)):
@@ -55,49 +85,18 @@ def create_crud_router(model: Type[SQLModel]) -> APIRouter:
         session.refresh(item)
         return item
 
-    # Read all with filtering + pagination
     @router.get("/", response_model=List[model])
     def read_all(
+        filters: FilterModel = Depends(),
         session: Session = Depends(get_session),
-        limit: int = Query(10, ge=1, le=100, description="Max results to return"),
-        offset: int = Query(0, ge=0, description="Results offset for pagination"),
-        **filters,
+        limit: int = Query(10, ge=1, le=100),
+        offset: int = Query(0, ge=0),
     ):
         query = select(model)
 
-        for field_expr, value in filters.items():
-            if value is None:
-                continue
-            # Split into field + operator (e.g., "age__gte")
-            if "__" in field_expr:
-                field, op = field_expr.split("__", 1)
-            else:
-                field, op = field_expr, "eq"
-
-            if not hasattr(model, field):
-                continue
-
-            column = getattr(model, field)
-            target_type = model.__annotations__.get(field, str)
-            converted_value = convert_value(value, target_type)
-
-            # Map operators
-            if op == "eq":
-                query = query.where(column == converted_value)
-            elif op == "ne":
-                query = query.where(column != converted_value)
-            elif op == "lt":
-                query = query.where(column < converted_value)
-            elif op == "lte":
-                query = query.where(column <= converted_value)
-            elif op == "gt":
-                query = query.where(column > converted_value)
-            elif op == "gte":
-                query = query.where(column >= converted_value)
-            elif op == "icontains" and isinstance(converted_value, str):
-                query = query.where(column.ilike(f"%{converted_value}%"))
-            elif op == "contains" and isinstance(converted_value, str):
-                query = query.where(column.like(f"%{converted_value}%"))
+        for field_name, value in filters.dict(exclude_none=True).items():
+            column = getattr(model, field_name)
+            query = query.where(column == value)
 
         query = query.limit(limit).offset(offset)
         return session.exec(query).all()
