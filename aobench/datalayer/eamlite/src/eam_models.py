@@ -2,8 +2,8 @@ import datetime
 import decimal
 from typing import Optional
 
-from sqlalchemy import (Column, Date, ForeignKeyConstraint, Identity, Integer,
-                        Numeric, PrimaryKeyConstraint, String,
+from sqlalchemy import (Column, Date, DateTime, ForeignKeyConstraint, Identity,
+                        Integer, Numeric, PrimaryKeyConstraint, String,
                         UniqueConstraint)
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -206,8 +206,8 @@ class Workorders(SQLModel, table=True):
     type: Optional[str] = Field(default=None, sa_column=Column('type', String(255)))
     priority: Optional[int] = Field(default=None, sa_column=Column('priority', Integer))
     description: Optional[str] = Field(default=None, sa_column=Column('description', String(255)))
-    startdate: Optional[datetime.date] = Field(default=None, sa_column=Column('startdate', Date))
-    enddate: Optional[datetime.date] = Field(default=None, sa_column=Column('enddate', Date))
+    startdate: Optional[datetime.datetime] = Field(default=None, sa_column=Column('startdate', DateTime))
+    enddate: Optional[datetime.datetime] = Field(default=None, sa_column=Column('enddate', DateTime))
 
     assets: Optional['Assets'] = Relationship(back_populates='workorders')
     locations: Optional['Locations'] = Relationship(back_populates='workorders')
