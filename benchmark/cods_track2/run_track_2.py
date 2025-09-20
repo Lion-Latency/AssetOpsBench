@@ -81,7 +81,7 @@ def run_execution_workflow(
 
     wf = DynamicWorkflow(
         tasks=[task],
-        llm=llm_model,
+        
     )
 
     if generate_steps_only:
