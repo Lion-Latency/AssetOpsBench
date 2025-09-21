@@ -9,7 +9,7 @@
 ![Mistral](https://img.shields.io/badge/Model-Mistral-21C2A4) 
 ![Granite](https://img.shields.io/badge/Model-Granite-21C2A4)
 
-📄 [Paper](https://arxiv.org/pdf/2506.03828) | 🤗 [Huggingface](https://huggingface.co/papers/2506.03828) | 📢 [Blog](https://research.ibm.com/blog/asset-ops-benchmark)
+📄 [Paper](https://arxiv.org/pdf/2506.03828) | 🤗 [Huggingface](https://huggingface.co/papers/2506.03828) | 📢 [Blog](https://research.ibm.com/blog/asset-ops-benchmark) | [Contributors](#contributors)
 
 </div>
 
@@ -30,14 +30,14 @@
 
 ---
 
-## 📣 Announcements
+## Announcements
 - **2025-06-01**: AssetOpsBench v1.0 released with 140+ industrial scenarios.  
-- **2025-09-01**: [CODS](https://ikdd.acm.org/cods-2025/) Competition launched.  
-- **Upcoming Events**: *Tutorial at AAAI 2026* – Agents for Industry 4.0 Applications.  
+- **2025-09-01**: [CODS](https://ikdd.acm.org/cods-2025/) Competition launched. Access AI Agentic Challenge [AssetOpsBench-Live](https://www.codabench.org/competitions/10206/)    
+- **Upcoming Events**: *Tutorial at AAAI 2026* – [Agents for Industry 4.0 Applications](https://ibm.github.io/AssetOpsBench/aaai_website/).  
 - Stay tuned for new tracks, competitions, and community events.
 ---
 
-## 🏗️ Introduction
+## Introduction
 AssetOpsBench is a **unified framework for developing, orchestrating, and evaluating domain-specific AI agents** in industrial asset operations and maintenance.  
 
 It provides:
@@ -48,7 +48,7 @@ Designed for **maintenance engineers, reliability specialists, and facility plan
 
 ---
 
-## 📂 Datasets: 140+ Scenarios
+## Datasets: 140+ Scenarios
 AssetOpsBench scenarios span multiple domains:  
 
 | Domain | Example Task |
@@ -63,7 +63,7 @@ Explore all scenarios [here](https://github.com/IBM/AssetOpsBench/tree/main/scen
 
 ---
 
-## 🤖 AI Agents
+## AI Agents
 ### Domain-Specific Agents
 - **IoT Agent**: `get_sites`, `get_history`, `get_assets`, `get_sensors`  
 - **FMSR Agent**: `get_sensors`, `get_failure_modes`, `get_failure_sensor_mapping`  
@@ -76,14 +76,14 @@ Explore all scenarios [here](https://github.com/IBM/AssetOpsBench/tree/main/scen
 
 ---
 
-## 🖼️ System Diagram
+## System Diagram
 Visual overview of AssetOpsBench workflow:  
 
 ![System Diagram](path/to/system_diagram.png)  <!-- Replace with your image path -->
 
 ---
 
-## 🏆 Leaderboards
+## Leaderboards
 - Evaluated with **7 Large Language Models**  
 - Trajectories scored using **LLM Judge (Llama-4-Maverick-17B)**  
 - **6-dimensional criteria** measure reasoning, execution, and data handling  
@@ -108,14 +108,14 @@ docker-compose -f benchmark/docker-compose.yml up
 
 ---
 
-## 🎤 Talks & Events
+## Talks & Events
 - **Workshops**: Participate in *GenAIBench-26* at AAAI 2025 focusing on multi-agent AI workflows.  
 - **Webinars & Seminars**: Learn best practices for industrial task automation with AI agents.  
 - **Competitions**: Benchmark your agents on real-world industrial scenarios using AssetOpsBench.
 
 ---
 
-## 🔗 External Resources
+## External Resources
 - 📄 **Paper**: [AssetOpsBench: Benchmarking AI Agents for Industrial Asset Operations](https://arxiv.org/pdf/2506.03828)  
 - 🤗 **HuggingFace**: [Scenario & Model Hub](https://huggingface.co/papers/2506.03828)  
 - 📢 **Blog**: [Insights, Tutorials, and Updates](https://research.ibm.com/blog/asset-ops-benchmark)  
