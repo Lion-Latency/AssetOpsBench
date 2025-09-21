@@ -9,7 +9,7 @@
 ![Mistral](https://img.shields.io/badge/Model-Mistral-21C2A4) 
 ![Granite](https://img.shields.io/badge/Model-Granite-21C2A4)
 
-📄 [Paper](https://arxiv.org/pdf/2506.03828) | 🤗 [Huggingface](https://huggingface.co/papers/2506.03828) | 📢 [Blog](https://research.ibm.com/blog/asset-ops-benchmark) | [Contributors](#contributors)
+📄 [Paper](https://arxiv.org/pdf/2506.03828) | 🤗 [HF-Dataset](https://huggingface.co/datasets/ibm-research/AssetOpsBench) | 📢 [Blog](https://research.ibm.com/blog/asset-ops-benchmark) | [Contributors](#contributors)
 
 </div>
 
