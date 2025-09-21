@@ -1,0 +1,19 @@
+{
+  "projectName": "AssetOpsBench",
+  "projectOwner": "IBM",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": ["README.md"],
+  "imageSize": 100,
+  "commit": true,
+  "contributorsPerLine": 7,
+  "contributors": [
+    {
+      "login": "DhavalRepo18",
+      "name": "DhavalRepo18",
+      "avatar_url": "https://github.com/DhavalRepo18.png",
+      "profile": "https://github.com/DhavalRepo18",
+      "contributions": ["code"]
+    }
+  ]
+}
