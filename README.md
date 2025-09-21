@@ -5,7 +5,7 @@
 ![AssetOps](https://img.shields.io/badge/Domain-Asset_Operations-blue) 
 ![MultiAgentBench](https://img.shields.io/badge/Domain-Multi--agent_Bench-blue) 
 ![OpenAI](https://img.shields.io/badge/Model-OpenAI-21C2A4)
-![Llama](https://img.shields.io/badge/Model-Llama-21C2A4)
+![Llama](https://img.shields.io/badge/Model-Llama-21C2A4)    
 ![Mistral](https://img.shields.io/badge/Model-Mistral-21C2A4) 
 ![Granite](https://img.shields.io/badge/Model-Granite-21C2A4)
 
@@ -120,5 +120,14 @@ docker-compose -f benchmark/docker-compose.yml up
 - 🤗 **HuggingFace**: [Scenario & Model Hub](https://huggingface.co/papers/2506.03828)  
 - 📢 **Blog**: [Insights, Tutorials, and Updates](https://research.ibm.com/blog/asset-ops-benchmark)  
 - 🎥 **Recorded Talks**: Link coming soon.
+
+---
+
+## Contributors
+
+Thanks goes to these wonderful people ✨
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ---
