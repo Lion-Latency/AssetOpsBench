@@ -183,7 +183,7 @@ kubectl cluster-info
 
 ## 4. Environment Variables
 
-You can use [.env](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
+You can use [.env](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/cods_track2/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
 
 Fill in your `.env` file with the following:
 
