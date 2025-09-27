@@ -12,6 +12,12 @@ from agent_hive.logger import get_custom_logger
 
 logger = get_custom_logger(__name__)
 
+# =========================================================
+# TODO: Participants can edit this section ONLY
+# Add variable, dict. no more any import just any inline code
+# =========================================================
+# END OF EDITABLE SECTION
+
 
 class NewPlanningWorkflow(Workflow):
     """
