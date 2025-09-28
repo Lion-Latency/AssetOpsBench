@@ -27,7 +27,7 @@ from agent_hive.tools.skyspark import (
 )
 
 from agent_hive.workflows.track1_planning import NewPlanningWorkflow
-from agent_hive.agents.react_agent import ReactAgent
+from agent_hive.agents.react_reflect_agent import ReactReflectAgent as ReactAgent
 
 from agent_hive.logger import get_custom_logger
 
@@ -37,14 +37,13 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-RESULT_DIR = '/home/track1_result/'
-PLAN_DIR = RESULT_DIR + 'plan/'
-TRAJECTORY_DIR = RESULT_DIR + 'trajectory/'
+RESULT_DIR = "/home/track1_result/"
+PLAN_DIR = RESULT_DIR + "plan/"
+TRAJECTORY_DIR = RESULT_DIR + "trajectory/"
 
 
 def load_scenarios(utterance_ids):
-    ds = load_dataset(
-        "ibm-research/AssetOpsBench", "scenarios")
+    ds = load_dataset("ibm-research/AssetOpsBench", "scenarios")
     train_ds = ds["train"]
     df = train_ds.to_pandas()
 
@@ -53,9 +52,7 @@ def load_scenarios(utterance_ids):
     return filtered_df.to_dict(orient="records")
 
 
-def run_planning_workflow(
-        question, qid, llm_model=16, generate_steps_only=False
-):
+def run_planning_workflow(question, qid, llm_model=16, generate_steps_only=False):
     iot_r_agent = ReactAgent(
         name=iot_agent_name,
         description=iot_agent_description,
@@ -99,10 +96,8 @@ def run(utterances, generate_steps_only=False):
     os.makedirs(TRAJECTORY_DIR, exist_ok=True)
 
     for utterance in utterances:
-        logger.info('=' * 10)
-        logger.info(
-            f"ID: {utterance['id']}, Task: {utterance['text']}"
-        )
+        logger.info("=" * 10)
+        logger.info(f"ID: {utterance['id']}, Task: {utterance['text']}")
         trajectory_file = f"{TRAJECTORY_DIR}Q_{utterance['id']}_trajectory.json"
 
         ans = run_planning_workflow(
@@ -122,11 +117,11 @@ def run(utterances, generate_steps_only=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--utterance_ids", type=str, default='1,106')
+    parser.add_argument("--utterance_ids", type=str, default="1,106")
     parser.add_argument("--generate_steps_only", type=bool, default=False)
 
     args = parser.parse_args()
-    utterance_ids = [int(uid.strip()) for uid in args.utterance_ids.split(',')]
+    utterance_ids = [int(uid.strip()) for uid in args.utterance_ids.split(",")]
     utterances = load_scenarios(utterance_ids)
 
     run(
