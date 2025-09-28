@@ -107,6 +107,16 @@
       "contributions": [
         "doc"
       ]
+    },
+    {
+      "login": "DeveloperMindset123",
+      "name": "Ayan Das",
+      "avatar_url": "https://avatars.githubusercontent.com/u/109440738?v=4",
+      "profile": "https://github.com/DeveloperMindset123",
+      "contributions": [
+        "doc",
+        "code"
+      ]
     }
   ],
   "commitType": "docs",
