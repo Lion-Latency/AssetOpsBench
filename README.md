@@ -94,7 +94,7 @@ Example: MetaAgent leaderboard
 
 ---
 
-## 🐳 Run AssetOpsBench in Docker
+## Run AssetOpsBench in Docker
 - Pre-built Docker Images: `assetopsbench-basic` (minimal) & `assetopsbench-extra` (full)  
 - Conda environment: `assetopsbench`  
 - [Full setup guide](https://github.com/IBM/AssetOpsBench/tree/main/benchmark/README.md)  
