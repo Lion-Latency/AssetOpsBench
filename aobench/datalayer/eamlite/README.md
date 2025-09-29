@@ -5,6 +5,8 @@ It contains data, api server and mcp tools that can be used during agent develop
 
 It is the backbone of the AssetOpsBench's data layer.
 
+![eamlite schema](/aobench/doc/eamlite_schema.png)
+
 ## Build
 
 from the top level fodler of the project run
