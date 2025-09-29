@@ -24,11 +24,29 @@ from agent_hive.tools.skyspark import (
     iot_bms_fewshots,
     iot_agent_description,
     iot_agent_name,
+    iot_task_examples,
 )
-
+from agent_hive.tools.tsfm import (
+    tsfm_tools,
+    tsfm_fewshots,
+    tsfm_agent_name,
+    tsfm_agent_description,
+    tsfm_task_examples,
+)
+from agent_hive.tools.wo import (
+    wo_agent_description,
+    wo_agent_name,
+    wo_fewshots,
+    wo_tools,
+    wo_task_examples,
+)
+from agent_hive.agents.react_reflect_agent import ReactReflectAgent
+from agent_hive.logger import get_custom_logger
+from agent_hive.agents.wo_agent import WorderOrderAgent
 from agent_hive.workflows.track2_execution import DynamicWorkflow
+from agent_hive.workflows.planning_review import PlanningReviewWorkflow
 from agent_hive.agents.react_agent import ReactAgent
-
+from agent_hive.enum import ContextType
 from agent_hive.logger import get_custom_logger
 
 logger = get_custom_logger(__name__)
@@ -56,43 +74,60 @@ def load_scenarios(utterance_ids):
 def run_execution_workflow(
         question, qid, llm_model=16, generate_steps_only=False
 ):
-    iot_r_agent = ReactAgent(
+    iot_r_agent = ReactReflectAgent(
         name=iot_agent_name,
         description=iot_agent_description,
         tools=iot_bms_tools,
         llm=llm_model,
         few_shots=iot_bms_fewshots,
+        task_examples=iot_task_examples,
+        reflect_step=1,
     )
 
-    fmsr_r_agent = ReactAgent(
+    fmsr_r_agent = ReactReflectAgent(
         name=fmsr_agent_name,
         description=fmsr_agent_description,
         tools=fmsr_tools,
         llm=llm_model,
         task_examples=fmsr_task_examples,
         few_shots=fmsr_fewshots,
+        reflect_step=1,
+    )
+
+    tsfm_rr_agent = ReactReflectAgent(
+        name=tsfm_agent_name,
+        description=tsfm_agent_description,
+        tools=tsfm_tools,
+        llm=llm_model,
+        few_shots=tsfm_fewshots,
+        task_examples=tsfm_task_examples,
+        reflect_step=1,
+    )
+    
+    wo_rr_agent = WorderOrderAgent(
+        name=wo_agent_name,
+        description=wo_agent_description,
+        tools=wo_tools,
+        llm=llm_model,
+        few_shots=wo_fewshots,
+        reflect_step=1,
+        task_examples=wo_task_examples,
     )
 
     task = Task(
         description=question,
         expected_output="",
-        agents=[iot_r_agent, fmsr_r_agent],
+        agents=[iot_r_agent, fmsr_r_agent, tsfm_rr_agent, wo_rr_agent],
     )
 
-    wf = DynamicWorkflow(
-        tasks=[task],
-        
+    pworkflow = PlanningReviewWorkflow([task], llm=llm_model)
+    generated_steps = pworkflow.generate_steps()
+
+    dynamic_workflow = DynamicWorkflow(
+        tasks=generated_steps, context_type=ContextType.SELECTED
     )
 
-    if generate_steps_only:
-        os.makedirs(PLAN_DIR, exist_ok=True)
-
-        return wf.generate_steps(
-            save_plan=True,
-            saved_plan_filename=RESULT_DIR + f"Model_{llm_model}_Q_{qid}_plan",
-        )
-
-    return wf.run()
+    return dynamic_workflow.run()
 
 
 def run(utterances, generate_steps_only=False):
