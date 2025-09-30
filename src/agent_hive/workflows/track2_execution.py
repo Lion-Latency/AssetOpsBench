@@ -173,7 +173,7 @@ class DynamicWorkflow(Workflow):
             # response = helper.execute_task(response)
 
             # 👉 OPTIONAL: Combine or compare multiple agent responses
-            response = response.split("Final Answer:")[0].strip()
+            response = response.replace("Final Answer:","").strip()
             self.memory.append(response)
 
             i += 1
