@@ -2,7 +2,7 @@ import datetime
 import decimal
 from typing import Any, List, Optional, Type, get_args, get_origin
 
-from database import get_session
+from eamlite.database import get_session
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from sqlalchemy.orm import Mapped

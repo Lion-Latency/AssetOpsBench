@@ -1,12 +1,10 @@
 import inspect
-from contextlib import asynccontextmanager
 
+import eamlite.eam_models as models
+from eamlite.crud_generator import create_crud_router
+from eamlite.database import init_db
 from fastapi import FastAPI
 from sqlmodel import SQLModel
-
-import eam_models as models
-from crud_generator import create_crud_router
-from database import init_db
 
 app = FastAPI(title="EAM API", version="1.0.0")
 
