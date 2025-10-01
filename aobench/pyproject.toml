@@ -12,8 +12,8 @@ dependencies = [
 
 [tool.uv.workspace]
 members = [
-    "aobench/scenario-client",
-    "aobench/scenario-server",
+    "scenario-client",
+    "scenario-server",
 ]
 
 [tool.uv.sources]

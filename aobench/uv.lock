@@ -134,8 +134,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "scenario-client", editable = "aobench/scenario-client" },
-    { name = "scenario-server", editable = "aobench/scenario-server" },
+    { name = "scenario-client", editable = "scenario-client" },
+    { name = "scenario-server", editable = "scenario-server" },
 ]
 
 [[package]]
@@ -2898,7 +2898,7 @@ wheels = [
 [[package]]
 name = "scenario-client"
 version = "0.1.0"
-source = { editable = "aobench/scenario-client" }
+source = { editable = "scenario-client" }
 dependencies = [
     { name = "httpx" },
     { name = "load-dotenv" },
@@ -2915,7 +2915,7 @@ requires-dist = [
 [[package]]
 name = "scenario-server"
 version = "0.1.0"
-source = { editable = "aobench/scenario-server" }
+source = { editable = "scenario-server" }
 dependencies = [
     { name = "litestar", extra = ["jinja"] },
     { name = "mlflow" },
