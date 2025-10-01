@@ -116,8 +116,9 @@ create table workorders (
   status varchar(50),
   priority int,
   description varchar(255),
-  startdate date,
-  enddate date
+
+  startdate timestamp,
+  enddate timestamp
 );
 
 create table locations (
