@@ -1,0 +1,21 @@
+[project]
+name = "AssetOpsBench"
+version = "0.1.0"
+description = "Asset operations benchmarking"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scenario-client",
+    "scenario-server",
+]
+
+
+[tool.uv.workspace]
+members = [
+    "scenario-client",
+    "scenario-server",
+]
+
+[tool.uv.sources]
+scenario-client = { workspace = true }
+scenario-server = { workspace = true }

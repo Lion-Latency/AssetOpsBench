@@ -46,6 +46,7 @@ ON CONFLICT (plannum) DO NOTHING;
 
 -- 5) Insert/Upsert into workorders
 INSERT INTO workorders (workordernum, assetid, type, priority, description, enddate,startdate)
+
 SELECT 
     s.wo_id,
     a.assetid,
@@ -55,9 +56,13 @@ SELECT
     END AS type,
     NULLIF(s.work_priority,'')::INT,
     s.wo_description,
+
     to_timestamp(s.actual_finish, 'MM/DD/YY HH24:MI') AS enddate,
     to_timestamp(s.actual_finish, 'MM/DD/YY HH24:MI') 
         - s.duration::interval AS startdate
+
+    NULLIF(s.actual_finish,'')::DATE
+
 FROM staging_workorders s
 LEFT JOIN assets a ON a.assetnum = s.equipment_id
 ON CONFLICT (workordernum) DO NOTHING;
