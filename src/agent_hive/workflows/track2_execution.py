@@ -83,7 +83,7 @@ class TaskRevisionHelperAgent(BaseAgent):
 
 class DynamicWorkflow(Workflow):
     """
-    DynamicWorkflow extends the baseline SequentialWorkflow with more flexible
+    DynamicWorkflow extends the baseline Workflow with more flexible
     execution strategies and multi-agent support.
     """
 
@@ -152,7 +152,7 @@ class DynamicWorkflow(Workflow):
         #   - Change memory persistence logic
         #   - Replace Executor orchestration logic
         # =========================================================
-
+        self.context_type = ContextType.SELECTED
         max_loops = 15
         i = 0
         while i < len(self.tasks) and i < max_loops:
@@ -173,7 +173,7 @@ class DynamicWorkflow(Workflow):
             # response = helper.execute_task(response)
 
             # 👉 OPTIONAL: Combine or compare multiple agent responses
-            response = response.split("Final Answer:")[0].strip()
+            response = response.replace("Final Answer:","").strip()
             self.memory.append(response)
 
             i += 1

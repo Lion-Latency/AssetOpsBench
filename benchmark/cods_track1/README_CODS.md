@@ -198,9 +198,7 @@ kubectl cluster-info
 
 ## 4. Environment Variables
 
-Treat the `.env` as an example for the layout, the `docker-compose.yml` file will reference `.env.local` file.
-
-You can use [.env](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
+You can use [.env](https://github.com/IBM/AssetOpsBench/blob/Competition_CODS/benchmark/cods_track1/.env) or add your environment variables to `.env` which can be passed to containers through `docker-compose.yml`.
 
 Fill in your `.env.local` file with the following (Please see Notes, you do not need all the value to be filled.):
 
@@ -216,16 +214,6 @@ HF_APIKEY= <<Hugging face API key>>
 WATSONX_APIKEY=
 WATSONX_PROJECT_ID=
 WATSONX_URL=
-
-PATH_TO_DATASETS_DIR=/opt/conda/envs/assetopsbench/lib/python3.12/site-packages/tsfmagent/data/datasets
-PATH_TO_MODELS_DIR=/opt/conda/envs/assetopsbench/lib/python3.12/site-packages/tsfmagent/data/tsfm_models
-PATH_TO_OUTPUTS_DIR=/opt/conda/envs/assetopsbench/lib/python3.12/site-packages/tsfmagent/output
-
-SKYSPARK_USERNAME=
-SKYSPARK_PASSWORD=
-SKYSPARK_URL=
-
-OPENAI_API_KEY=
 ```
 
 ### Notes
