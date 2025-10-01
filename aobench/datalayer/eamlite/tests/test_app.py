@@ -1,14 +1,14 @@
-from fastapi.testclient import TestClient
-import unittest
 import os
-from datetime import timedelta, timezone, datetime
-from eamlite.eam_models import Workorders
-from sqlmodel import Session, SQLModel, create_engine
 import sqlite3
-
-from os import environ, remove, getenv
-from string import ascii_letters
+import unittest
+from datetime import datetime, timedelta, timezone
+from os import environ, getenv, remove
 from random import sample
+from string import ascii_letters
+
+from eamlite.eam_models import Workorders
+from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel, create_engine
 
 
 class TestApp(unittest.TestCase):
@@ -20,10 +20,7 @@ class TestApp(unittest.TestCase):
         This test uses an sqlite database in a temporary file
         """
 
-        # self.ENV_NAME = "DATABASE_URL"
-        self.ENV_NAME = os.getenv(
-            "DATABASE_URL", "postgresql+psycopg://eamlite:eamlite@eampg:5431/eamlite"
-        )
+        self.ENV_NAME = "DATABASE_URL"
 
         try:
             self.old_url = environ[self.ENV_NAME]
