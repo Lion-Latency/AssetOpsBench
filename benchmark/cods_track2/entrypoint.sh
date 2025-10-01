@@ -15,4 +15,4 @@ python -m pip show tsfmagent
 python /home/run_track_2.py --utterance_ids 1,106
 
 # Keep the container alive
-#tail -f /dev/null
+tail -f /dev/null
