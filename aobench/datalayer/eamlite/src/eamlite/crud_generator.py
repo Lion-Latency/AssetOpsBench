@@ -3,11 +3,10 @@ import decimal
 from typing import Any, List, Optional, Type, get_args, get_origin
 
 from eamlite.database import get_session
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from sqlalchemy.orm import Mapped
-from sqlalchemy.sql.sqltypes import (Boolean, Date, Float, Integer, Numeric,
-                                     String)
+from sqlalchemy.sql.sqltypes import Boolean, Date, Float, Integer, Numeric, String
 from sqlmodel import Session, SQLModel, select
 
 
@@ -78,8 +77,9 @@ def create_crud_router(model: Type[SQLModel]) -> APIRouter:
     FilterModel = generate_filter_model(model)
 
     # Create
+    # NOTE : replaced item : model with Type[SQLModel] since variables are not allowed type expression error warning kept popping up
     @router.post("/", response_model=model)
-    def create(item: model, session: Session = Depends(get_session)):
+    def create(item: Type[SQLModel], session: Session = Depends(get_session)):
         session.add(item)
         session.commit()
         session.refresh(item)
@@ -87,7 +87,7 @@ def create_crud_router(model: Type[SQLModel]) -> APIRouter:
 
     @router.get("/", response_model=List[model])
     def read_all(
-        filters: FilterModel = Depends(),
+        filters: FilterModel = Depends(),  # type: ignore
         session: Session = Depends(get_session),
         limit: int = Query(10, ge=1, le=100),
         offset: int = Query(0, ge=0),
