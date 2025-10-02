@@ -34,8 +34,8 @@
 - 🎯 **Upcoming Events**: Tutorial at **AAAI 2026 – [Agents for Industry 4.0 Applications](https://ibm.github.io/AssetOpsBench/aaai_website/)**.  
 - 🏆 **Accepted Papers**: Parts of papers are accepted at **[NeurIPS 2025](https://nips.cc/)**, **[EMNLP 2025 Research Track](https://2025.emnlp.org/)**, and **[EMNLP 2025 Industry Track](https://2025.emnlp.org/)**.  
 - 🚀 **2025-09-01**: [CODS 2025](https://ikdd.acm.org/cods-2025/) Competition launched – Access **AI Agentic Challenge** [AssetOpsBench-Live](https://www.codabench.org/competitions/10206/).  
-- 📦 **2025-06-01**: AssetOpsBench v1.0 released with **140+ industrial scenarios**.
-  
+- 📦 **2025-06-01**: AssetOpsBench v1.0 released with **141 industrial Scenarios**.
+
 ✨ Stay tuned for new tracks, competitions, and community events.
 
 ---
@@ -51,7 +51,7 @@ Designed for **maintenance engineers, reliability specialists, and facility plan
 
 ---
 
-## Datasets: 140+ Scenarios
+## Datasets: 141 Scenarios
 AssetOpsBench scenarios span multiple domains:  
 
 | Domain | Example Task |
@@ -67,13 +67,13 @@ Explore all scenarios [HF-Dataset](https://huggingface.co/datasets/ibm-research/
 ---
 
 ## AI Agents
-### Domain-Specific Agents
+### Domain-Specific Agents (Important tools)
 - **IoT Agent**: `get_sites`, `get_history`, `get_assets`, `get_sensors`  
 - **FMSR Agent**: `get_sensors`, `get_failure_modes`, `get_failure_sensor_mapping`  
 - **TSFM Agent**: `forecasting`, `timeseries_anomaly_detection`  
 - **WO Agent**: `generate_work_order`  
 
-### Multi-Agent Frameworks
+### Multi-Agent Frameworks (Blue Prints)
 - **[MetaAgent](https://github.com/IBM/AssetOpsBench/tree/main/src/meta_agent)**: reAct-based single-agent-as-tool orchestration  
 - **[AgentHive](https://github.com/IBM/AssetOpsBench/tree/main/src/agent_hive)**: plan-and-execute sequential workflow  
 
@@ -98,6 +98,7 @@ Example: MetaAgent leaderboard
 ---
 
 ## Run AssetOpsBench in Docker
+- Please Refer to the 
 - Pre-built Docker Images: `assetopsbench-basic` (minimal) & `assetopsbench-extra` (full)  
 - Conda environment: `assetopsbench`  
 - [Full setup guide](https://github.com/IBM/AssetOpsBench/tree/main/benchmark/README.md)  
