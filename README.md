@@ -31,11 +31,11 @@
 ---
 
 ## Announcements
-- 📦 **2025-06-01**: AssetOpsBench v1.0 released with **140+ industrial scenarios**.  
-- 🚀 **2025-09-01**: [CODS 2025](https://ikdd.acm.org/cods-2025/) Competition launched – Access **AI Agentic Challenge** [AssetOpsBench-Live](https://www.codabench.org/competitions/10206/).  
-- 🏆 **Accepted Papers**: Parts of papers are accepted at **[NeurIPS 2025](https://nips.cc/)**, **[EMNLP 2025 Research Track](https://2025.emnlp.org/)**, and **[EMNLP 2025 Industry Track](https://2025.emnlp.org/)**.  
 - 🎯 **Upcoming Events**: Tutorial at **AAAI 2026 – [Agents for Industry 4.0 Applications](https://ibm.github.io/AssetOpsBench/aaai_website/)**.  
-
+- 🏆 **Accepted Papers**: Parts of papers are accepted at **[NeurIPS 2025](https://nips.cc/)**, **[EMNLP 2025 Research Track](https://2025.emnlp.org/)**, and **[EMNLP 2025 Industry Track](https://2025.emnlp.org/)**.  
+- 🚀 **2025-09-01**: [CODS 2025](https://ikdd.acm.org/cods-2025/) Competition launched – Access **AI Agentic Challenge** [AssetOpsBench-Live](https://www.codabench.org/competitions/10206/).  
+- 📦 **2025-06-01**: AssetOpsBench v1.0 released with **140+ industrial scenarios**.
+  
 ✨ Stay tuned for new tracks, competitions, and community events.
 
 ---
@@ -62,7 +62,7 @@ AssetOpsBench scenarios span multiple domains:
 | WO | "Generate a work order for Chiller 6 anomaly detection" |
 
 Some tasks focus on a **single domain**, others are **multi-step end-to-end workflows**.  
-Explore all scenarios [here](https://github.com/IBM/AssetOpsBench/tree/main/scenarios).
+Explore all scenarios [HF-Dataset](https://huggingface.co/datasets/ibm-research/AssetOpsBench).
 
 ---
 
