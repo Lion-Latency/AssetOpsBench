@@ -126,6 +126,11 @@ docker-compose -f benchmark/docker-compose.yml up
 
 ---
 
+[![Star History Chart](https://api.star-history.com/svg?repos=IBM/AssetOpsBench&type=Date)](https://star-history.com/#IBM/AssetOpsBench&Date)
+
+
+---
+
 ## Contributors
 
 Thanks goes to these wonderful people ✨
@@ -159,3 +164,4 @@ Thanks goes to these wonderful people ✨
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ---
+
