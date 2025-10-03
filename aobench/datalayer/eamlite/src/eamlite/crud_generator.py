@@ -97,7 +97,6 @@ def sqlalchemy_type_to_python(sa_type):
 def generate_filter_model(model: type[SQLModel]):
     fields = {}
     for column in model.__table__.columns:
-        # accept multiple occurrences of the same query param
         fields[column.name] = (
             Optional[str],
             Field(
@@ -106,9 +105,11 @@ def generate_filter_model(model: type[SQLModel]):
             ),
         )
 
-    FilterModel = create_model(f"{model.__name__}Filter", __base__=BaseModel, **fields)
-    # optionally forbid unknown keys:
-    # FilterModel.model_config = ConfigDict(extra="forbid")
+    FilterModel = create_model(
+        f"{model.__name__}Filter",
+        __base__=BaseModel,
+        **fields,
+    )
     return FilterModel
 
 
@@ -180,6 +181,10 @@ def create_crud_router(model: SQLModel) -> APIRouter:
         limit: int = Query(10, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ):
+        """Each query filter accepts either a value e.g., `param1=value` or a comparison operator e.g., `param1=[gt]val`
+        Supported operators are: [eq] or no operator; [gt]; [gte]; [lt] and [lte]
+        """
+
         query = select(model)
         condition = build_filters(filters, model)
 
