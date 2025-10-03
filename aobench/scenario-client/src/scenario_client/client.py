@@ -4,9 +4,8 @@ import ssl
 from os import environ
 
 import httpx
-from dotenv import load_dotenv
-
 import mlflow
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -59,6 +58,45 @@ class AOBench:
         self.scenario_uri: str = scenario_uri
         self.tracking_uri: str = tracking_uri
 
+    async def arun(
+        self,
+        afunc,
+        scenario_id,
+        run_name: str = "",
+        post_process=None,
+        tracking_context: dict | None = None,
+        **kwargs,
+    ):
+        try:
+            if tracking_context:
+                if run_name != "":
+                    mlflow.set_tag("mlflow.runName", run_name)
+
+                with mlflow.start_span(name=scenario_id):
+                    result = await afunc(**kwargs)
+
+                eid = tracking_context["experiment_id"]
+                rid = tracking_context["run_id"]
+                tag_latest_trace(experiment_id=eid, run_id=rid, scenario_id=scenario_id)
+            else:
+                result = await afunc(**kwargs)
+
+            if post_process:
+                result = post_process(result)
+
+            logger.debug(f"answer: {json.dumps(result, indent=2)}")
+
+            answer = {
+                "scenario_id": str(scenario_id),
+                "answer": json.dumps(result),
+            }
+
+        except Exception as e:
+            logger.error(f"aobench.run failed: {e=}")
+            raise
+
+        return answer
+
     def run(
         self,
         func,
@@ -68,19 +106,22 @@ class AOBench:
         tracking_context: dict | None = None,
         **kwargs,
     ):
-
         try:
-            result = func(**kwargs)
-            if post_process:
-                result = post_process(result)
-
             if tracking_context:
+                if run_name != "":
+                    mlflow.set_tag("mlflow.runName", run_name)
+
+                with mlflow.start_span(name=scenario_id):
+                    result = func(**kwargs)
+
                 eid = tracking_context["experiment_id"]
                 rid = tracking_context["run_id"]
                 tag_latest_trace(experiment_id=eid, run_id=rid, scenario_id=scenario_id)
+            else:
+                result = func(**kwargs)
 
-                if run_name != "":
-                    mlflow.set_tag("mlflow.runName", run_name)
+            if post_process:
+                result = post_process(result)
 
             logger.debug(f"answer: {json.dumps(result, indent=2)}")
 
