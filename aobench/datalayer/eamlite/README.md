@@ -7,18 +7,22 @@ It is the backbone of the AssetOpsBench's data layer.
 
 ![eamlite schema](/aobench/doc/eamlite_schema.png)
 
-## Build
+## Running EAM Lite
 
-from the top level fodler of the project run
+The root folder of the EAM Lite component is (`aobench/datalayer/eamlite`)
+
+### Manual run
+
+#### Build
+
+from the root fodler of the project run
 
 ```sh
-podman build -t eamlite-postgres:latest -f db/Containerfile .
+podman build -t eamlite-postgres:latest -f db/Containerfile db
 podman build -t eamlite-api -f src/Containerfile .
 ```
 
-## Run
-
-### Manual run
+#### Run
 
 ```sh
 podman network create eamlite
@@ -39,4 +43,6 @@ POSTGRES_DB=
 
 then run `podman compose up`
 
-in both cases the api will be available at `localhost:8000` and the doc at `localhost:8000/doc`
+## Use EAM Lite
+
+The API will be available at `localhost:8000` and the doc at `localhost:8000/docs`

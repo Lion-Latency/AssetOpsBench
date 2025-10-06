@@ -45,7 +45,7 @@ WHERE code IS NOT NULL AND code <> ''
 ON CONFLICT (plannum) DO NOTHING;
 
 -- 5) Insert/Upsert into workorders
-INSERT INTO workorders (workordernum, assetid, type, priority, description, enddate,startdate)
+INSERT INTO workorders (workordernum, assetid, type, priority, description, enddate,startdate, actual_finish)
 
 SELECT 
     s.wo_id,
@@ -59,7 +59,7 @@ SELECT
 
     to_timestamp(s.actual_finish, 'MM/DD/YY HH24:MI') AS enddate,
     to_timestamp(s.actual_finish, 'MM/DD/YY HH24:MI') 
-        - s.duration::interval AS startdate
+        - s.duration::interval AS startdate,
 
     NULLIF(s.actual_finish,'')::DATE
 

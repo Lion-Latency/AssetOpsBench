@@ -1,6 +1,9 @@
 services:
   eamlite-db:
     image: eamlite-postgres
+    build:
+      context: db
+      dockerfile: Containerfile
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -9,6 +12,9 @@ services:
       - "5432:5432"
   eamlite-api:
     image: eamlite-api
+    build:
+      context: .
+      dockerfile: src/Containerfile
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@eamlite-db:5432/${POSTGRES_DB}
     ports:
