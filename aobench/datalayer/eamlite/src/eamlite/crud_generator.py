@@ -157,6 +157,8 @@ def create_crud_router(model: SQLModel) -> APIRouter:
     def forbid_extra_params(request: Request, filters: FilterModel = Depends()):
         raw_params = request.query_params
         allowed = set(filters.model_fields.keys())
+        allowed.add("limit")
+        allowed.add("offset")
         for key in raw_params.keys():
             if key not in allowed:
                 raise HTTPException(
