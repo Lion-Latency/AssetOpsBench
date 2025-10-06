@@ -45,4 +45,4 @@ then run `podman compose up`
 
 ## Use EAM Lite
 
-The API will be available at `localhost:8000` and the doc at `localhost:8000/docs`
+EAM Lite is accessible through HTTP requests via curl or any other client. The API will be available at `localhost:8000` and the doc at `localhost:8000/docs`
