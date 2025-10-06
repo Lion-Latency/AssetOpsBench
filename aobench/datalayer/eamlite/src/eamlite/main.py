@@ -5,13 +5,13 @@ To run this within the docker container, use the following commands on the termi
 """
 
 import inspect
+from contextlib import asynccontextmanager
 
 import eamlite.eam_models as models
 from eamlite.crud_generator import create_crud_router
 from eamlite.database import init_db
 from fastapi import FastAPI
 from sqlmodel import SQLModel
-from contextlib import asynccontextmanager
 
 
 # refactored deprecated code

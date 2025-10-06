@@ -1,13 +1,78 @@
 import datetime
 import decimal
-from typing import Any, List, Optional, Type, get_args, get_origin
+import re
+from typing import Any
+from typing import List
+from typing import List as TList
+from typing import Optional, Tuple, Type
 
 from eamlite.database import get_session
-from fastapi import APIRouter, Depends, Query, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, create_model
-from sqlalchemy.orm import Mapped
-from sqlalchemy.sql.sqltypes import Boolean, Date, Float, Integer, Numeric, String
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field, create_model
+from sqlalchemy import and_
+from sqlalchemy.sql.sqltypes import (Boolean, Date, DateTime, Float, Integer,
+                                     Numeric, String)
 from sqlmodel import Session, SQLModel, select
+
+OPS = {"eq", "gt", "gte", "lt", "lte"}
+
+
+def parse_iso_datetime(s: str) -> datetime.datetime:
+    s = s.strip()
+    # accept Z as UTC
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    # Python's fromisoformat supports offsets like +00:00
+    return datetime.datetime.fromisoformat(s)
+
+
+def parse_filter_value(raw: str, py_type: type):
+    """Parse '[gte]value' (or 'value') and convert to py_type.
+    Returns (op, typed_value) or raises HTTPException(422) on error.
+    """
+    m = re.match(r"^\[(\w+)\](.*)$", raw)
+    if m:
+        op, val_str = m.group(1), m.group(2)
+    else:
+        op, val_str = "eq", raw
+
+    if op not in OPS:
+        raise HTTPException(status_code=422, detail=f"Invalid operator '{op}'")
+
+    try:
+        if py_type is int:
+            val = int(val_str)
+        elif py_type is float:
+            val = float(val_str)
+        elif py_type is bool:
+            low = val_str.lower()
+            if low in ("true", "1", "t", "yes", "y"):
+                val = True
+            elif low in ("false", "0", "f", "no", "n"):
+                val = False
+            else:
+                raise ValueError("invalid boolean")
+        elif py_type is decimal.Decimal:
+            val = decimal.Decimal(val_str)
+        elif py_type is datetime.date:
+            # If time included, parse and use .date()
+            if "T" in val_str or "Z" in val_str or "+" in val_str:
+                dt = parse_iso_datetime(val_str)
+                val = dt.date()
+            else:
+                val = datetime.date.fromisoformat(val_str)
+        elif py_type is datetime.datetime:
+            val = parse_iso_datetime(val_str)
+        else:
+            # fallback to string
+            val = val_str
+    except Exception:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid value for {py_type.__name__}: {val_str}",
+        )
+
+    return op, val
 
 
 def sqlalchemy_type_to_python(sa_type):
@@ -24,24 +89,20 @@ def sqlalchemy_type_to_python(sa_type):
         return decimal.Decimal
     if isinstance(sa_type, Date):
         return datetime.date
+    if isinstance(sa_type, DateTime):
+        return datetime.datetime
     return str  # fallback to string if unknown
 
 
 def generate_filter_model(model: type[SQLModel]):
-    """Generate a Pydantic model with *optional* query parameters for filtering."""
     fields = {}
-
     for column in model.__table__.columns:
-        py_type = sqlalchemy_type_to_python(column.type)
-
-        # Make every filter param optional, regardless of nullable status
-        # (because a filter can always be omitted)
-        optional_type = Optional[py_type]
-
-        # Use Field(default=None) so Pydantic doesn't require it
         fields[column.name] = (
-            optional_type,
-            Field(default=None, description=f"Filter by {column.name}"),
+            Optional[str],
+            Field(
+                default=None,
+                description=f"Filter by {column.name} using e.g. [gte]2023-01-01",
+            ),
         )
 
     FilterModel = create_model(
@@ -49,32 +110,60 @@ def generate_filter_model(model: type[SQLModel]):
         __base__=BaseModel,
         **fields,
     )
-    FilterModel.model_config = ConfigDict(extra="ignore")
     return FilterModel
 
 
-def convert_value(value: str, target_type: Any):
-    try:
-        if target_type == int:
-            return int(value)
-        elif target_type == float:
-            return float(value)
-        elif target_type == decimal.Decimal:
-            return decimal.Decimal(value)
-        elif target_type == bool:
-            return value.lower() in ("true", "1", "yes")
-        elif target_type == datetime.date:
-            return datetime.date.fromisoformat(value)
-        return value
-    except Exception:
-        return value
+def build_filters(filters: BaseModel, model: type[SQLModel]):
+    """Return an SQLAlchemy condition (and_(...)) or None if no filters."""
+    conditions = []
+
+    for field_name, raw_values in filters.model_dump(exclude_none=True).items():
+        column = getattr(model, field_name)
+        col_info = model.__table__.columns[field_name]
+        py_type = sqlalchemy_type_to_python(col_info.type)
+
+        # raw_values is a list because we will declare fields as List[str]
+        values = raw_values if isinstance(raw_values, list) else [raw_values]
+        for rv in values:
+            op, value = parse_filter_value(rv, py_type)
+
+            # If column is datetime but value is date, you may want to
+            # normalize (optional). Example below converts aware -> naive UTC:
+            if isinstance(value, datetime.datetime):
+                # Optionally: convert aware -> naive UTC to match DB storage
+                if value.tzinfo is not None:
+                    value = value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+            if op == "eq":
+                conditions.append(column == value)
+            elif op == "gt":
+                conditions.append(column > value)
+            elif op == "gte":
+                conditions.append(column >= value)
+            elif op == "lt":
+                conditions.append(column < value)
+            elif op == "lte":
+                conditions.append(column <= value)
+
+    return and_(*conditions) if conditions else None
 
 
-def create_crud_router(model: Type[SQLModel]) -> APIRouter:
+def create_crud_router(model: SQLModel) -> APIRouter:
     router = APIRouter()
     model_name = model.__name__
 
     FilterModel = generate_filter_model(model)
+
+    def forbid_extra_params(request: Request, filters: FilterModel = Depends()):
+        raw_params = request.query_params
+        allowed = set(filters.model_fields.keys())
+        for key in raw_params.keys():
+            if key not in allowed:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown query parameter: {key}"
+                )
+
+        return filters
 
     # Create
     # NOTE : replaced item : model with Type[SQLModel] since variables are not allowed type expression error warning kept popping up
@@ -87,16 +176,20 @@ def create_crud_router(model: Type[SQLModel]) -> APIRouter:
 
     @router.get("/", response_model=List[model])
     def read_all(
-        filters: FilterModel = Depends(),  # type: ignore
+        filters: FilterModel = Depends(forbid_extra_params),  # type: ignore
         session: Session = Depends(get_session),
         limit: int = Query(10, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ):
-        query = select(model)
+        """Each query filter accepts either a value e.g., `param1=value` or a comparison operator e.g., `param1=[gt]val`
+        Supported operators are: [eq] or no operator; [gt]; [gte]; [lt] and [lte]
+        """
 
-        for field_name, value in filters.dict(exclude_none=True).items():
-            column = getattr(model, field_name)
-            query = query.where(column == value)
+        query = select(model)
+        condition = build_filters(filters, model)
+
+        if condition is not None:
+            query = query.where(condition)
 
         query = query.limit(limit).offset(offset)
         return session.exec(query).all()
