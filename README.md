@@ -9,6 +9,8 @@
 ![Mistral](https://img.shields.io/badge/Model-Mistral-21C2A4) 
 ![Granite](https://img.shields.io/badge/Model-Granite-21C2A4)
 
+📄 [ReActXen](https://github.com/IBM/ReActXen/blob/main/docs/tutorial/ReActXen_IoT_Agent_EMNLP_2025.pdf) | 📄 [AssetOpsBench](./docs/tutorial/AssetOpsBench_Technical_Material.pdf)
+
 📄 [Paper](https://arxiv.org/pdf/2506.03828) | 🤗 [HF-Dataset](https://huggingface.co/datasets/ibm-research/AssetOpsBench) | 📢 [Blog](https://research.ibm.com/blog/asset-ops-benchmark) | [Contributors](#contributors)
 
 </div>
