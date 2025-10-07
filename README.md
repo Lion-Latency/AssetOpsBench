@@ -1,6 +1,6 @@
 <div align="center">
 
-# AssetOpsBench: Benchmarking AI Agents for Industrial Asset Operations & Maintenance
+# AI Agents for Industrial Asset Operations & Maintenance
 
 ![AssetOps](https://img.shields.io/badge/Domain-Asset_Operations-blue) 
 ![MultiAgentBench](https://img.shields.io/badge/Domain-Multi--agent_Bench-blue) 
