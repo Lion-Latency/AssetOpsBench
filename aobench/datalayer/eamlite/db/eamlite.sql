@@ -118,7 +118,8 @@ create table workorders (
   description varchar(255),
 
   startdate timestamp,
-  enddate timestamp
+  enddate timestamp,
+  actual_finish timestamp
 );
 
 create table locations (

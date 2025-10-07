@@ -105,6 +105,11 @@ class TestApp(unittest.TestCase):
         self.assertEqual(resp4.status_code, 200)
         self.assertEqual(len(resp4.json()), 2, "should return 2 work order")
 
+        # # use the app to retrieve
+        resp5 = self.client.get("/workorders?limit=1")
+        self.assertEqual(resp5.status_code, 200)
+        self.assertEqual(len(resp5.json()), 1, "should return 1 work orders")
+
     def tearDown(self):
         """Cleans up"""
 
