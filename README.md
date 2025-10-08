@@ -116,13 +116,6 @@ docker-compose -f benchmark/docker-compose.yml up
 
 ---
 
-## Talks & Events
-- **Workshops**: Participate in *GenAIBench-26* at AAAI 2025 focusing on multi-agent AI workflows.  
-- **Webinars & Seminars**: Learn best practices for industrial task automation with AI agents.  
-- **Competitions**: Benchmark your agents on real-world industrial scenarios using AssetOpsBench.
-
----
-
 ## External Resources
 - 📄 **Paper**: [AssetOpsBench: Benchmarking AI Agents for Industrial Asset Operations](https://arxiv.org/pdf/2506.03828)  
 - 🤗 **HuggingFace**: [Scenario & Model Hub](https://huggingface.co/papers/2506.03828)  
