@@ -12,6 +12,7 @@ class ScenarioType:
 class Scenario:
     id: str
     query: str
+    metadata: dict
 
 
 @dataclass

@@ -128,12 +128,14 @@ name = "assetopsbench"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "huggingface-hub" },
     { name = "scenario-client" },
     { name = "scenario-server" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", specifier = ">=0.35.3" },
     { name = "scenario-client", editable = "scenario-client" },
     { name = "scenario-server", editable = "scenario-server" },
 ]

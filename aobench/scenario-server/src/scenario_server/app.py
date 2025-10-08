@@ -14,6 +14,7 @@ from scenario_server.endpoints import (
     scenario_types,
     set_tracking_uri,
 )
+from scenario_server.handlers.aob.aob import AOBScenarios
 
 logger: logging.Logger = logging.getLogger("scenario-server")
 
@@ -52,7 +53,7 @@ def get_app(
         register_scenario_handlers(handlers=handlers)
 
     if include_default_handlers:
-        register_scenario_handlers(handlers=[])
+        register_scenario_handlers(handlers=[AOBScenarios])
 
     app = Litestar(
         debug=True,
