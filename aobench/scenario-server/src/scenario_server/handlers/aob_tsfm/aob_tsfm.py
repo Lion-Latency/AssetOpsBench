@@ -17,9 +17,9 @@ HUGGINGFACE_REPO = "ibm-research/AssetOpsBench"
 HUGGINGFACE_DATA = "data/scenarios/all_utterance.jsonl"
 
 
-class AOBScenarios(ScenarioHandler):
-    id = "d3bec9b0-59b4-4a2f-9497-28cb1eed1c80"
-    title = "Asset Operations Bench - General"
+class AOBTSFMScenarios(ScenarioHandler):
+    id = "13aab653-66fe-4fe6-84d8-89f1b18eede3"
+    title = "Asset Operations Bench - TSFM"
     description = "Human-authored evaluation prompts for industrial asset agents."
 
     def __init__(self):
@@ -35,7 +35,7 @@ class AOBScenarios(ScenarioHandler):
                 scenario_data = [json.loads(line) for line in f]
 
             for sd in scenario_data:
-                if ("type" in sd and sd["type"].lower() == "") or "type" not in sd:
+                if "type" in sd and sd["type"].lower() == "tsfm":
                     self.scenario_data[str(sd["id"])] = sd
 
         except Exception as e:
@@ -80,9 +80,6 @@ class AOBScenarios(ScenarioHandler):
         for k, v in self.scenario_data.items():
             try:
                 metadata = dict()
-
-                if "type" in v:
-                    metadata["type"] = v["type"]
 
                 if "category" in v:
                     metadata["category"] = v["category"]
@@ -130,22 +127,22 @@ class AOBScenarios(ScenarioHandler):
 if __name__ == "__main__":
     import asyncio
 
-    aobs = AOBScenarios()
-    submission = [
+    aobs = AOBTSFMScenarios()
+    submission: list[SubmissionAnswer] = [
         SubmissionAnswer(
             scenario_id="Q.S5",
             answer='[{"scenario_id": "Q.S5.0", "answer": ""}]',
         ),
         SubmissionAnswer(
-            scenario_id="501",
+            scenario_id="201",
             answer="",
         ),
         SubmissionAnswer(
-            scenario_id="501",
+            scenario_id="201",
             answer=json.dumps(
                 {
-                    "trace": "query database for iot data",
-                    "result": [],
+                    "trace": "Fetch csv data. Use 1 percent of data to fine tune model.",
+                    "result": ["saved_model_file=/tmp/model"],
                 }
             ),
         ),

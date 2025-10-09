@@ -17,9 +17,9 @@ HUGGINGFACE_REPO = "ibm-research/AssetOpsBench"
 HUGGINGFACE_DATA = "data/scenarios/all_utterance.jsonl"
 
 
-class AOBScenarios(ScenarioHandler):
-    id = "d3bec9b0-59b4-4a2f-9497-28cb1eed1c80"
-    title = "Asset Operations Bench - General"
+class AOBWorkOrderScenarios(ScenarioHandler):
+    id = "4021467f-363b-41d2-8c62-f6aa738b01b7"
+    title = "Asset Operations Bench - Workorders"
     description = "Human-authored evaluation prompts for industrial asset agents."
 
     def __init__(self):
@@ -35,7 +35,7 @@ class AOBScenarios(ScenarioHandler):
                 scenario_data = [json.loads(line) for line in f]
 
             for sd in scenario_data:
-                if ("type" in sd and sd["type"].lower() == "") or "type" not in sd:
+                if "type" in sd and sd["type"].lower() == "workorder":
                     self.scenario_data[str(sd["id"])] = sd
 
         except Exception as e:
@@ -80,9 +80,6 @@ class AOBScenarios(ScenarioHandler):
         for k, v in self.scenario_data.items():
             try:
                 metadata = dict()
-
-                if "type" in v:
-                    metadata["type"] = v["type"]
 
                 if "category" in v:
                     metadata["category"] = v["category"]
@@ -130,21 +127,21 @@ class AOBScenarios(ScenarioHandler):
 if __name__ == "__main__":
     import asyncio
 
-    aobs = AOBScenarios()
-    submission = [
+    aobs = AOBWorkOrderScenarios()
+    submission: list[SubmissionAnswer] = [
         SubmissionAnswer(
             scenario_id="Q.S5",
             answer='[{"scenario_id": "Q.S5.0", "answer": ""}]',
         ),
         SubmissionAnswer(
-            scenario_id="501",
+            scenario_id="401",
             answer="",
         ),
         SubmissionAnswer(
-            scenario_id="501",
+            scenario_id="401",
             answer=json.dumps(
                 {
-                    "trace": "query database for iot data",
+                    "trace": "find workorders for equipment labeled as CWC04013 in 2017",
                     "result": [],
                 }
             ),
