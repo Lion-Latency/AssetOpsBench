@@ -14,6 +14,10 @@ from scenario_server.endpoints import (
     scenario_types,
     set_tracking_uri,
 )
+from scenario_server.handlers.aob.aob import AOBScenarios
+from scenario_server.handlers.aob_iot.aob_iot import AOBIoTScenarios
+from scenario_server.handlers.aob_tsfm.aob_tsfm import AOBTSFMScenarios
+from scenario_server.handlers.aob_workorders.aob_workorders import AOBWorkOrderScenarios
 
 logger: logging.Logger = logging.getLogger("scenario-server")
 
@@ -52,7 +56,14 @@ def get_app(
         register_scenario_handlers(handlers=handlers)
 
     if include_default_handlers:
-        register_scenario_handlers(handlers=[])
+        register_scenario_handlers(
+            handlers=[
+                AOBScenarios,
+                AOBIoTScenarios,
+                AOBTSFMScenarios,
+                AOBWorkOrderScenarios,
+            ]
+        )
 
     app = Litestar(
         debug=True,
