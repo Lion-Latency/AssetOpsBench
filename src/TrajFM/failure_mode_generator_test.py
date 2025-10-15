@@ -1,9 +1,8 @@
 from failure_mode_generator import process_trajectories
 
 res = process_trajectories(
-    traj_root_base="/Users/jzhou/work/notebooks/agenticfram/trajectories_codabench",
-    model_id=18,
+    traj_root_base="/Users/dhaval/Documents/GitHub/CodeBenchBackEnd/codabench/tmp0k8_i0of/trajectory",
+    model_id=12,
 )
 
-print(res["combined_path"])
-print(res["combined_df"].head())
+print (res)

@@ -1,7 +1,7 @@
 from failure_mode_reduction import failure_mode_reduction
 
 result = failure_mode_reduction(
-    combined_pickle_path="/Users/jzhou/work/notebooks/agenticfram/TrajFM/processed_trajectories/combined_m18_db.pkl",
+    combined_pickle_path="./processed_trajectories/combined_m12_db.pkl",
     out_dir="summary_codabench",
     # model_name="all-MiniLM-L6-v2",  # or another sentence-transformers model
     # k=6,                             # fix cluster count if you prefer
