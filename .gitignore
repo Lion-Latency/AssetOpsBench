@@ -193,3 +193,4 @@ src/assetopsbench/sample_data/bulk_docs.json
 benchmark/cods_track1/.env.local
 src/agent_hive/workflows/submission_track1.zip  
 src/agent_hive/workflows/track1_planning.py    
+.vscode/
