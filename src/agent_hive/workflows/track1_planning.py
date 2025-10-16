@@ -100,6 +100,16 @@ class NewPlanningWorkflow(Workflow):
         logger.info(f"Plan: \n{llm_response}")
 
         final_plan = llm_response
+        
+        # =========================================================
+        # TODO: Participants can edit this section ONLY
+        # 🎨 Purpose: Customize LLM response post-processing
+        # ❌ Not allowed: 
+        #     - Modify workflow execution
+        #     - Replace the base ReAct agent or Executor or Task
+        #     - Change memory or retry logic
+        # =========================================================
+        
         self.memory = []
 
         task_pattern = r"#Task\d+: (.+)"
@@ -159,6 +169,10 @@ class NewPlanningWorkflow(Workflow):
             planned_tasks.append(a_task)
 
         logger.info(f"Planned Tasks: \n{planned_tasks}")
+
+        # =========================================================
+        # END OF EDITABLE SECTION
+        # =========================================================
 
         return planned_tasks
 
