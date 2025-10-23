@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-logger: logging.Logger = logging.getLogger("aobench-client")
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def set_ssl_context():
@@ -84,11 +84,11 @@ class AOBench:
             if post_process:
                 result = post_process(result)
 
-            logger.debug(f"answer: {json.dumps(result, indent=2)}")
+            logger.debug(f"{result=}")
 
             answer = {
                 "scenario_id": str(scenario_id),
-                "answer": json.dumps(result),
+                "answer": result,
             }
 
         except Exception as e:
@@ -123,11 +123,11 @@ class AOBench:
             if post_process:
                 result = post_process(result)
 
-            logger.debug(f"answer: {json.dumps(result, indent=2)}")
+            logger.debug(f"{result=}")
 
             answer = {
                 "scenario_id": str(scenario_id),
-                "answer": json.dumps(result),
+                "answer": result,
             }
 
         except Exception as e:
@@ -139,6 +139,7 @@ class AOBench:
     def scenario_types(self) -> dict:
         with httpx.Client(verify=verify_ssl) as client:
             endpoint: str = f"{self.scenario_uri}/scenario-types"
+            logger.debug(f"{endpoint=}")
 
             r: httpx.Response = client.get(f"{endpoint}")
             r.raise_for_status()
@@ -150,6 +151,7 @@ class AOBench:
     ) -> tuple[dict, dict | None]:
         with httpx.Client(verify=verify_ssl) as client:
             endpoint: str = f"{self.scenario_uri}/scenario-set/{scenario_set_id}"
+            logger.debug(f"{endpoint=}")
 
             r: httpx.Response = client.get(
                 f"{endpoint}",
@@ -205,6 +207,7 @@ class AOBench:
             timeout=httpx.Timeout(connect=5.0, read=90.0, write=60.0, pool=5.0),
         ) as client:
             endpoint: str = f"{self.scenario_uri}/scenario-set/{scenario_set_id}/grade"
+            logger.debug(f"{endpoint=}")
 
             jsn = {
                 "scenario_set_id": scenario_set_id,
