@@ -107,6 +107,7 @@ async def grade_submission(scenario_set_id: str, data: dict) -> dict:
             ].grade_responses(submission)
 
             traces = mlflow.search_traces(experiment_ids=[experiment_id], run_id=run_id)
+            correct = 0
             for result in results:
                 result_id: str = result.scenario_id
 
@@ -119,6 +120,9 @@ async def grade_submission(scenario_set_id: str, data: dict) -> dict:
                     tid = trace_row.iloc[0]["trace_id"]
                     feedback = MLFlowFeedback(name="Correct", value=result.correct)
                     log_assessment(trace_id=tid, assessment=feedback)
+
+                    if result.correct == True:
+                        correct += 1
                 except Exception as e:
                     logger.error(f"failed to log result: {e=}")
 
@@ -137,6 +141,8 @@ async def grade_submission(scenario_set_id: str, data: dict) -> dict:
                             )
                     except Exception as e:
                         logger.error(f"failed to log assessment: {e=}")
+
+            mlflow.set_tag("Correct", f"{correct} / {len(results)}")
     else:
         results = await REGISTERED_SCENARIO_HANDLERS[scenario_set_id].grade_responses(
             submission
