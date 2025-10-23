@@ -12,7 +12,8 @@ This repository contains two benchmark tracks:
 
 ## Docker Update
 ### quay.io/assetopsbench/assetopsbench-extra
-- [10/09/2025] fix [git issue](https://github.com/IBM/AssetOpsBench/issues/78) by removing mixtral large.  tag: `v20251009`, `latest`
+- [10/22/2025] fix [git issue](https://github.com/IBM/AssetOpsBench/issues/85). tag: `v20251022`, `latest`
+- [10/09/2025] fix [git issue](https://github.com/IBM/AssetOpsBench/issues/78) by removing mixtral large.  tag: `v20251009`
 - [09/08/2025] add support for work order agent. tag: `v20250908`
 - [09/05/2025] initial update
 
