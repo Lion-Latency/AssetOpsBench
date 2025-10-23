@@ -50,6 +50,8 @@ else
     -H "Content-Type: application/json" \
     -d @"$OUTPUT_FILE"
 
+  curl -s -X POST "$COUCHDB_URL/$COUCHDB_DBNAME/_index" -H "Content-Type: application/json" -d '{ "type" : "json", "index": { "fields": [ "asset_id", "timestamp" ] } }'
+
   echo "✅ Database created and populated."
 fi
 
