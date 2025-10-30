@@ -3,9 +3,10 @@ import random
 import string
 import time
 
-from litestar import Litestar, Request
+from litestar import Litestar, Request, get
 from litestar.middleware import DefineMiddleware
 from litestar.openapi.config import OpenAPIConfig
+from litestar.response import Redirect
 from litestar.types import ASGIApp, Receive, Scope, Send
 from scenario_server.endpoints import (
     OPENAPI_CONFIG,
@@ -47,6 +48,11 @@ class RequestTimingMiddleware:
             await self.app(scope, receive, send)
 
 
+@get("/")
+async def redirect_to_swagger() -> Redirect:
+    return Redirect(path="/schema/swagger")
+
+
 def get_app(
     handlers: list = [],
     include_default_handlers: bool = True,
@@ -74,7 +80,12 @@ def get_app(
     app = Litestar(
         debug=True,
         middleware=[DefineMiddleware(RequestTimingMiddleware)],
-        route_handlers=[scenario_types, fetch_scenario, grade_submission],
+        route_handlers=[
+            redirect_to_swagger,
+            scenario_types,
+            fetch_scenario,
+            grade_submission,
+        ],
         openapi_config=openapi_cfg,
     )
 
