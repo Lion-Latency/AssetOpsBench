@@ -5,6 +5,7 @@ import time
 
 from litestar import Litestar, Request
 from litestar.middleware import DefineMiddleware
+from litestar.openapi.config import OpenAPIConfig
 from litestar.types import ASGIApp, Receive, Scope, Send
 from scenario_server.endpoints import (
     OPENAPI_CONFIG,
@@ -47,7 +48,10 @@ class RequestTimingMiddleware:
 
 
 def get_app(
-    handlers: list = [], include_default_handlers: bool = True, tracking_uri: str = ""
+    handlers: list = [],
+    include_default_handlers: bool = True,
+    tracking_uri: str = "",
+    openapi_config: OpenAPIConfig | None = None,
 ) -> Litestar:
     if tracking_uri != "":
         set_tracking_uri(tracking_uri=tracking_uri)
@@ -65,11 +69,13 @@ def get_app(
             ]
         )
 
+    openapi_cfg: OpenAPIConfig = openapi_config or OPENAPI_CONFIG
+
     app = Litestar(
         debug=True,
         middleware=[DefineMiddleware(RequestTimingMiddleware)],
         route_handlers=[scenario_types, fetch_scenario, grade_submission],
-        openapi_config=OPENAPI_CONFIG,
+        openapi_config=openapi_cfg,
     )
 
     return app
