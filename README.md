@@ -34,8 +34,21 @@
 ---
 
 ## Announcements
-- 🎯 **Upcoming Events**: Tutorial at **AAAI 2026 – [Agents for Industry 4.0 Applications](https://ibm.github.io/AssetOpsBench/aaai_website/)**.  
-- 🕓 **Past Event**: **2025-10-03** – 2 Hour Workshop *AI Agents and Their Role in Industry 4.0 Applications* (**[NJIT-ACM](https://acm.njit.edu/events)**)  
+- 📰 **AAAI Demo:** **AssetOpsBench-Live: Privacy-Aware Online Evaluation of Multi-Agent Performance in Industrial Operations**  
+  ![AAAI 2026](https://img.shields.io/badge/Conference-AAAI_2026-1976D2)  
+  ![Status](https://img.shields.io/badge/Status-Demo_Coming-yellow)  
+  ![Authors](https://img.shields.io/badge/Authors-Dhaval_C_Patel,_Nianjun_Zhou,_Shuxin_Lin,_James_T_Rayfield,_Chathurangi_Shyalika,_Suryanarayana_R_Yarrabothula-lightgrey)
+
+- 🎯 **AAAI Lab:** **From Inception to Productization: Hands-on Lab for the Lifecycle of Multimodal Agentic AI in Industry 4.0**  
+  ![AAAI 2026](https://img.shields.io/badge/Conference-AAAI_2026-1976D2) 
+  ![Date](https://img.shields.io/badge/Date-Jan_20–21_2026-orange) 
+  ![Website](https://img.shields.io/badge/Website-Agents_for_Industry_4.0_Applications-brightgreen) 
+  ![Authors](https://img.shields.io/badge/Authors-Chathurangi_Shyalika,_Saumya_Ahuja,_Shuxin_Lin,_Ruwan_Wickramarachchi,_Dhaval_Patel,_Amit_Sheth-lightgrey)
+  
+- 🕓 **Past Event:** **2025-10-03** – 2-Hour Workshop: *AI Agents and Their Role in Industry 4.0 Applications*  
+  ![Event](https://img.shields.io/badge/Event-Workshop-lightblue) 
+  ![Host](https://img.shields.io/badge/Host-NJIT_ACM-brightgreen)
+  
 - 🏆 **Accepted Papers**: Parts of papers are accepted at **[NeurIPS 2025](https://nips.cc/)**, **[EMNLP 2025 Research Track](https://2025.emnlp.org/)**, and **[EMNLP 2025 Industry Track](https://2025.emnlp.org/)**.  
 - 🚀 **2025-09-01**: [CODS 2025](https://ikdd.acm.org/cods-2025/) Competition launched – Access **AI Agentic Challenge** [AssetOpsBench-Live](https://www.codabench.org/competitions/10206/).  
 - 📦 **2025-06-01**: AssetOpsBench v1.0 released with **141 industrial Scenarios**.  
