@@ -34,6 +34,11 @@
 ---
 
 ## Announcements
+
+- 📰 **NeurIPS-2025 Social — Evaluating Agentic Systems**, 
+  *Talk: "Building Reliable Agentic Benchmarks: Insights from AssetOpsBench"*  
+  [![Join on Luma](https://img.shields.io/badge/Attend_on-Luma-blue?logo=google-calendar)](https://luma.com/mkyyvypm?tk=AkGVp5)
+  
 - 📰 **AAAI Demo:** **AssetOpsBench-Live: Privacy-Aware Online Evaluation of Multi-Agent Performance in Industrial Operations**  
   ![AAAI 2026](https://img.shields.io/badge/Conference-AAAI_2026-1976D2)  
   ![Status](https://img.shields.io/badge/Status-Demo_Coming-yellow)  
