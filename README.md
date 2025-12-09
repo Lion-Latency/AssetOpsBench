@@ -38,7 +38,8 @@
 ## Announcements
 
 - 📰 **NeurIPS-2025 Social — Evaluating Agentic Systems**  
-  **Talk:** *Building Reliable Agentic Benchmarks: Insights from AssetOpsBench*  
+  **Talk:** *Building Reliable Agentic Benchmarks: Insights from AssetOpsBench*
+  **Total Registered Users:** *2000+*
   [![Authors](https://img.shields.io/badge/Authors-Dhaval_C_Patel-lightgrey)](#)  
   [![Join on Luma](https://img.shields.io/badge/Attend_on_Luma-Click_to_Register-blue?logo=google-calendar)](https://luma.com/mkyyvypm?tk=AkGVp5)
       
