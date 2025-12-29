@@ -36,12 +36,6 @@
 ---
 
 ## Announcements
-
-- 📰 **NeurIPS-2025 Social — Evaluating Agentic Systems**  
-  **Talk:** *Building Reliable Agentic Benchmarks: Insights from AssetOpsBench*
-  **Total Registered Users:** *2000+*
-  [![Authors](https://img.shields.io/badge/Authors-Dhaval_C_Patel-lightgrey)](#)  
-  [![Join on Luma](https://img.shields.io/badge/Attend_on_Luma-Click_to_Register-blue?logo=google-calendar)](https://luma.com/mkyyvypm?tk=AkGVp5)
       
 - 📰 **AAAI-2026 Demo:** **AssetOpsBench-Live: Privacy-Aware Online Evaluation of Multi-Agent Performance in Industrial Operations**  
   ![AAAI 2026](https://img.shields.io/badge/Conference-AAAI_2026-1976D2)  
@@ -53,6 +47,12 @@
   ![Date](https://img.shields.io/badge/Date-Jan_20–21_2026-orange) 
   ![Website](https://img.shields.io/badge/Website-Agents_for_Industry_4.0_Applications-brightgreen) 
   ![Authors](https://img.shields.io/badge/Authors-Chathurangi_Shyalika,_Saumya_Ahuja,_Shuxin_Lin,_Ruwan_Wickramarachchi,_Dhaval_Patel,_Amit_Sheth-lightgrey)
+
+- 📰 **NeurIPS-2025 Social — Evaluating Agentic Systems**  
+  **Talk:** *Building Reliable Agentic Benchmarks: Insights from AssetOpsBench*
+  **Total Registered Users:** *2000+*
+  [![Authors](https://img.shields.io/badge/Authors-Dhaval_C_Patel-lightgrey)](#)  
+  [![Join on Luma](https://img.shields.io/badge/Attend_on_Luma-Click_to_Register-blue?logo=google-calendar)](https://luma.com/mkyyvypm?tk=AkGVp5)
   
 - 🕓 **Past Event:** **2025-10-03** – 2-Hour Workshop: *AI Agents and Their Role in Industry 4.0 Applications*  
   ![Event](https://img.shields.io/badge/Event-Workshop-lightblue) 
