@@ -53,8 +53,9 @@
 - 📰 **NeurIPS-2025 Social — Evaluating Agentic Systems**  
   **Talk:** *Building Reliable Agentic Benchmarks: Insights from AssetOpsBench*
   **Total Registered Users:** *2000+*
-  [![Authors](https://img.shields.io/badge/Authors-Dhaval_C_Patel-lightgrey)](#)  
-  [![Join on Luma](https://img.shields.io/badge/Attend_on_Luma-Click_to_Register-blue?logo=google-calendar)](https://luma.com/mkyyvypm?tk=AkGVp5)
+  [![Conference](https://img.shields.io/badge/Conference-NeurIPS_2025-4B0082)](#)  
+  [![Speaker](https://img.shields.io/badge/Speaker-Dhaval_C_Patel-lightgrey)](#)  
+  [![Attend on Luma](https://img.shields.io/badge/Attend_on_Luma-Click_to_Register-blue?logo=google-calendar)](https://luma.com/mkyyvypm?tk=AkGVp5)
   
 - 🕓 **Past Event:** **2025-10-03** – 2-Hour Workshop: *AI Agents and Their Role in Industry 4.0 Applications*  
   ![Event](https://img.shields.io/badge/Event-Workshop-lightblue) 
