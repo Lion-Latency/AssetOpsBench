@@ -39,6 +39,9 @@
 
 ## Announcements (Papers, Invited Talks, etc) 
       
+- 📰 **AABA4ET/AAAI-2026:** **Agentic Code Generation for Heuristic Rules in Equipment Monitoring**
+![Authors](https://img.shields.io/badge/Authors-F_Lorenzi,_A_Langbridge,_F_O%27Donncha,_J_Rayfield,_B_Eck,_S_Rosato-lightgrey)
+
 - 📰 **IAAI/AAAI-2026:** **Diversity Meets Relevancy: Multi-Agent Knowledge Probing for Industry 4.0 Applications**
 ![Authors](https://img.shields.io/badge/Authors-C_Constantinides,_D_Patel,_S_Kimbleton,_N_Garg,_M_Paracha-lightgrey)
 
