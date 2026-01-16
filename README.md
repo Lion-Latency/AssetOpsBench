@@ -11,6 +11,7 @@
 **📘 Tutorials:** Learn more from our detailed guides —  
 [ReActXen IoT Agent (EMNLP 2025)](https://github.com/IBM/ReActXen/blob/main/docs/tutorial/ReActXen_IoT_Agent_EMNLP_2025.pdf) | 
 [FailureSensorIQ (NeurIPS 2025)](https://github.com/IBM/FailureSensorIQ) |
+[AssetOpsBench Lab (AAAI 2026)](https://ibm.github.io/AssetOpsBench/aaai_website/) |
 [Spiral (AAAI 2026)](https://github.com/IBM/SPIRAL) |
 [AssetOpsBench Technical Material](./docs/tutorial/AssetOpsBench_Technical_Material.pdf)
 
