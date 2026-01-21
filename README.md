@@ -21,6 +21,9 @@
 
 </div>
 
+## Resources
+- **Video Overview:** [AssetOpsBench - AI Agents for Industrial Asset Operations & Maintenance](https://www.youtube.com/watch?v=kXmBDMrKFjs) by Reliability Odyssey.
+  
 ---
 
 ## 📑 Table of Contents
