@@ -110,7 +110,7 @@ def get_app(
     app = Litestar(
         debug=debug,
         middleware=[DefineMiddleware(RequestTimingMiddleware)],
-        route_handlers=ROUTE_HANDLERS,
+        route_handlers=[redirect_to_swagger] + ROUTE_HANDLERS,
         openapi_config=openapi_cfg,
         on_startup=[startup],
         on_shutdown=[shutdown],
