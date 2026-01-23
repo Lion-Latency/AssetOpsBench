@@ -3,15 +3,15 @@ import logging
 import mlflow
 from mlflow.entities import Feedback as MLFlowFeedback
 from mlflow.tracing.assessment import log_assessment
-from scenario_server.entities import SubmissionAnswer, SubmissionScore
+from scenario_server.entities import ScenarioAnswer, ScenarioGrade, SubmissionResult
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.debug(f"debug: {__name__}")
 
 
-async def grade_responses(grader, data) -> list[SubmissionScore]:
-    submission: list[SubmissionAnswer] = [
-        SubmissionAnswer(scenario_id=s["scenario_id"], answer=s["answer"])
+async def grade_responses(grader, data) -> SubmissionResult:
+    submission: list[ScenarioAnswer] = [
+        ScenarioAnswer(scenario_id=s["scenario_id"], answer=s["answer"])
         for s in data["submission"]
     ]
 
@@ -29,9 +29,8 @@ async def grade_responses(grader, data) -> list[SubmissionScore]:
             results = await grader(submission)
 
             traces = mlflow.search_traces(experiment_ids=[experiment_id], run_id=run_id)
-            correct = 0
-            for result in results:
-                result_id: str = result.scenario_id
+            for grade in results.grades:
+                result_id: str = grade.scenario_id
 
                 mask = traces["tags"].apply(
                     lambda d: isinstance(d, dict) and d.get("scenario_id") == result_id
@@ -40,15 +39,13 @@ async def grade_responses(grader, data) -> list[SubmissionScore]:
 
                 try:
                     tid = trace_row.iloc[0]["trace_id"]
-                    feedback = MLFlowFeedback(name="Correct", value=result.correct)
+                    feedback = MLFlowFeedback(name="Correct", value=grade.correct)
                     log_assessment(trace_id=tid, assessment=feedback)
 
-                    if result.correct == True:
-                        correct += 1
                 except Exception as e:
                     logger.exception(f"failed to log result: {e=}")
 
-                for r in result.details:
+                for r in grade.details:
                     try:
                         tid = trace_row.iloc[0]["trace_id"]
                         if isinstance(r, MLFlowFeedback):
@@ -64,7 +61,13 @@ async def grade_responses(grader, data) -> list[SubmissionScore]:
                     except Exception as e:
                         logger.exception(f"failed to log assessment: {e=}")
 
-            mlflow.set_tag("Correct", f"{correct} / {len(results)}")
+            try:
+                for summary in results.summary:
+                    k = summary.name
+                    v = summary.value
+                    mlflow.set_tag(k, v)
+            except Exception as e:
+                logger.exception(f"failed to set summary tag")
     else:
         results = await grader(submission)
 

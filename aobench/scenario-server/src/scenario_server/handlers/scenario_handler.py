@@ -4,8 +4,8 @@ import logging
 from scenario_server.entities import (
     Scenario,
     ScenarioType,
-    SubmissionAnswer,
-    SubmissionScore,
+    ScenarioAnswer,
+    SubmissionResult,
 )
 
 logger: logging.Logger = logging.getLogger("scenario-server")
@@ -28,5 +28,5 @@ class ScenarioHandler(ABC):
 
     @abstractmethod
     async def grade_responses(
-        self, submission: list[SubmissionAnswer]
-    ) -> list[SubmissionScore]: ...
+        self, submission: list[ScenarioAnswer]
+    ) -> SubmissionResult: ...

@@ -5,8 +5,10 @@ from huggingface_hub import hf_hub_download
 from scenario_server.entities import (
     Scenario,
     ScenarioType,
-    SubmissionAnswer,
-    SubmissionScore,
+    ScenarioAnswer,
+    SubmissionResult,
+    ScenarioGrade,
+    SubmissionSummary,
 )
 from scenario_server.grading import evaluation_agent
 from scenario_server.handlers.scenario_handler import ScenarioHandler
@@ -41,7 +43,7 @@ class AOBScenarios(ScenarioHandler):
         except Exception as e:
             logger.exception(f"failed to init AOBScenarios: {e=}")
 
-    def _grade_answer(self, entry_id, answer) -> SubmissionScore:
+    def _grade_answer(self, entry_id, answer) -> ScenarioGrade:
         try:
             unwrap = json.loads(answer)
 
@@ -57,7 +59,7 @@ class AOBScenarios(ScenarioHandler):
                 trace=t,
             )
 
-            return SubmissionScore(
+            return ScenarioGrade(
                 scenario_id=entry_id,
                 correct=result,
                 details=details,
@@ -65,7 +67,7 @@ class AOBScenarios(ScenarioHandler):
         except Exception as e:
             logger.exception(f"failed to grade {entry_id=} : {e=}")
             logger.debug(f"{entry_id=} / {answer=} / {self.scenario_data[entry_id]}")
-            return SubmissionScore(
+            return ScenarioGrade(
                 scenario_id=entry_id,
                 correct=False,
                 details=[{"error": f"failed to grade scenario id: {entry_id}"}],
@@ -100,10 +102,11 @@ class AOBScenarios(ScenarioHandler):
         return scenarios
 
     async def grade_responses(
-        self, submission: list[SubmissionAnswer]
-    ) -> list[SubmissionScore]:
+        self, submission: list[ScenarioAnswer]
+    ) -> SubmissionResult:
 
-        grade = []
+        correct = 0
+        grades = []
         for entry in submission:
             try:
                 entry_id: str = entry.scenario_id
@@ -112,8 +115,8 @@ class AOBScenarios(ScenarioHandler):
                 continue
 
             if entry_id not in self.scenario_data:
-                grade.append(
-                    SubmissionScore(
+                grades.append(
+                    ScenarioGrade(
                         scenario_id=entry_id,
                         correct=False,
                         details=[{"error": f"unknown scenario id: {entry_id}"}],
@@ -121,26 +124,40 @@ class AOBScenarios(ScenarioHandler):
                 )
                 continue
 
-            g: SubmissionScore = self._grade_answer(entry_id, entry.answer)
-            grade.append(g)
+            g: ScenarioGrade = self._grade_answer(entry_id, entry.answer)
+            if g.correct:
+                correct += 1
 
-        return grade
+            grades.append(g)
+
+        summary: list[SubmissionSummary] = [
+            SubmissionSummary(
+                name="Correct",
+                value=f"{correct}/{len(self.scenario_data)}",
+            )
+        ]
+
+        return SubmissionResult(
+            scenario_set_id=self.id,
+            summary=summary,
+            grades=grades,
+        )
 
 
 if __name__ == "__main__":
     import asyncio
 
     aobs = AOBScenarios()
-    submission = [
-        SubmissionAnswer(
+    submission: list[ScenarioAnswer] = [
+        ScenarioAnswer(
             scenario_id="Q.S5",
             answer='[{"scenario_id": "Q.S5.0", "answer": ""}]',
         ),
-        SubmissionAnswer(
+        ScenarioAnswer(
             scenario_id="501",
             answer="",
         ),
-        SubmissionAnswer(
+        ScenarioAnswer(
             scenario_id="501",
             answer=json.dumps(
                 {
@@ -150,7 +167,5 @@ if __name__ == "__main__":
             ),
         ),
     ]
-    grade: list[SubmissionScore] = asyncio.run(
-        aobs.grade_responses(submission=submission)
-    )
+    grade: SubmissionResult = asyncio.run(aobs.grade_responses(submission=submission))
     print(f"{grade=}")
