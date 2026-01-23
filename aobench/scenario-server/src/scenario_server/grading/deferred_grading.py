@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 
 import asyncpg
-from scenario_server.entities import SubmissionScore
+from scenario_server.entities import ScenarioGrade, SubmissionResult
 from scenario_server.grading.grading import grade_responses
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class DeferredGradingStatus(str, Enum):
 
 @dataclass
 class DeferredGradingResult:
-    result: list[SubmissionScore]
+    result: SubmissionResult | None
     status: DeferredGradingStatus
     error: str | None
 
@@ -138,24 +138,19 @@ class PostGresGradingStorage(DeferredGradingStorage):
         self.database_url: str = database_url
         self.pool: asyncpg.Pool | None = None
 
-    def _result_pack(self, result: list[SubmissionScore]) -> str:
+    def _result_pack(self, result: SubmissionResult | None) -> str:
         if result:
-            result_str: str = json.dumps(
-                {
-                    "result": [asdict(score) for score in result],
-                }
-            )
+            result_str: str = json.dumps({"result": asdict(result)})
         else:
             result_str = json.dumps({"result": None})
 
         return result_str
 
-    def _result_unpack(self, result_str: str) -> list[SubmissionScore]:
+    def _result_unpack(self, result_str: str) -> SubmissionResult | None:
         result_obj = json.loads(result_str)
-        results = result_obj["result"]
-        sc: list[SubmissionScore] = [SubmissionScore(**result) for result in results]
+        result = result_obj["result"]
 
-        return sc
+        return result
 
     async def _connect(self):
         self.pool = await asyncpg.create_pool(self.database_url)
@@ -196,10 +191,10 @@ class PostGresGradingStorage(DeferredGradingStorage):
             if row is None:
                 raise KeyError(f"{grading_id} not found")
 
-            sc: list[SubmissionScore] = self._result_unpack(row["result"])
+            result: SubmissionResult | None = self._result_unpack(row["result"])
 
             return DeferredGradingResult(
-                result=sc,
+                result=result,
                 status=DeferredGradingStatus(row["status"]),
                 error=row["error"],
             )
@@ -239,7 +234,7 @@ class PostGresGradingStorage(DeferredGradingStorage):
             status = DeferredGradingStatus(row["status"])
             return DeferredGradingState(grading_id=grading_id, status=status)
 
-    async def store(self, grading_id, data) -> None:
+    async def store(self, grading_id, data: DeferredGradingResult) -> None:
         if not self.pool:
             await self._connect()
 
@@ -284,7 +279,7 @@ async def process_deferred_grading(
 ) -> None:
     try:
         logger.debug(f"deferred grading for {grade_id=}")
-        result: list[SubmissionScore] = await grade_responses(grader=grader, data=data)
+        result: SubmissionResult = await grade_responses(grader=grader, data=data)
         logger.debug(f"deferred grading for {grade_id=}: {result=}")
 
         await storage.store(
@@ -301,7 +296,7 @@ async def process_deferred_grading(
         await storage.store(
             grading_id=grade_id,
             data=DeferredGradingResult(
-                result=[],
+                result=None,
                 status=DeferredGradingStatus.FAILED,
                 error=str(e),
             ),

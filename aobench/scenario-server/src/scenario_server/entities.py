@@ -24,16 +24,29 @@ class ScenarioSet:
 
 
 @dataclass
-class SubmissionAnswer:
+class ScenarioAnswer:
     scenario_id: str
     answer: str
 
 
 @dataclass
-class SubmissionScore:
+class ScenarioGrade:
     scenario_id: str
     correct: bool
     details: list
+
+
+@dataclass
+class SubmissionSummary:
+    name: str
+    value: str
+
+
+@dataclass
+class SubmissionResult:
+    scenario_set_id: str
+    summary: list[SubmissionSummary]
+    grades: list[ScenarioGrade]
 
 
 @dataclass
@@ -41,4 +54,4 @@ class Submission:
     experiment_id: str
     run_id: str
     scenario_set_id: str
-    submission: list[SubmissionAnswer]
+    submission: list[ScenarioAnswer]

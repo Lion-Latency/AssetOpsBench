@@ -14,7 +14,7 @@ from litestar.status_codes import (
     HTTP_404_NOT_FOUND,
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
-from scenario_server.entities import ScenarioSet, ScenarioType, SubmissionScore
+from scenario_server.entities import ScenarioSet, ScenarioType, ScenarioGrade
 from scenario_server.grading import (
     DeferredGradingResult,
     DeferredGradingState,
@@ -137,9 +137,7 @@ async def deferred_grading_status(
 
 
 @get("deferred-grading/{grading_id: str}/result")
-async def deferred_grading_result(
-    grading_id: str, state: State
-) -> list[SubmissionScore]:
+async def deferred_grading_result(grading_id: str, state: State) -> list[ScenarioGrade]:
     try:
         storage: DeferredGradingStorage = state.storage
         grading_state: DeferredGradingState = await storage.state(grading_id=grading_id)
@@ -215,7 +213,7 @@ async def fetch_scenario(scenario_set_id: str, tracking: bool = False) -> dict:
 
 
 @post("/scenario-set/{scenario_set_id: str}/grade")
-async def grade_submission(scenario_set_id: str, data: dict) -> list[SubmissionScore]:
+async def grade_submission(scenario_set_id: str, data: dict) -> list[ScenarioGrade]:
     if scenario_set_id not in REGISTERED_SCENARIO_HANDLERS.keys():
         raise HTTPException(
             status_code=HTTP_404_NOT_FOUND,
