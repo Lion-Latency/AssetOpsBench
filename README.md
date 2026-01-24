@@ -49,6 +49,7 @@
 - 🎯 **AAAI-2026 Lab:** **From Inception to Productization: Hands-on Lab for the Lifecycle of Multimodal Agentic AI in Industry 4.0**  
 [![Website](https://img.shields.io/badge/Website-Agents_for_Industry_4.0_Applications-brightgreen)](https://ibm.github.io/AssetOpsBench/aaai_website/)
 ![Authors](https://img.shields.io/badge/Authors-Chathurangi_Shyalika,_Saumya_Ahuja,_Shuxin_Lin,_Ruwan_Wickramarachchi,_Dhaval_Patel,_Amit_Sheth-lightgrey)
+[![AAAI 2026 Slides](https://img.shields.io/badge/AAAI-Slides-red)](https://drive.google.com/file/d/16GaYxBQ2FsVqKpkKOU0PI_ZCTCsowenF/view?usp=sharing)
 
 - 📰 **AABA4ET/AAAI-2026:** **Agentic Code Generation for Heuristic Rules in Equipment Monitoring**
 ![Authors](https://img.shields.io/badge/Authors-F_Lorenzi,_A_Langbridge,_F_O%27Donncha,_J_Rayfield,_B_Eck,_S_Rosato-lightgrey)
