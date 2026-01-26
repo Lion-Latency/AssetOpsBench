@@ -1,10 +1,12 @@
 import logging
 import math
-
+from typing import List
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
 
 from reactxen.agents.evaluation_agent.agent import EvaluationAgent
+
+from scenario_server.grading.util import getSTmodel
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.debug(f"debug: {__name__}")
@@ -91,13 +93,23 @@ def evaluation_agent(
         return False, [{"name": "result", "value": False}]
 
 
-def cosine_similarity(x:str, y:str, emedding_model:str="all-MiniLM-L6-v2") -> float:
-    """Cosine similarity between strings"""
-    model = SentenceTransformer(emedding_model)
+def cosine_similarity(x:str|List, y:str|List, emedding_model:str="all-MiniLM-L6-v2") -> float | List:
+    """Cosine similarity between strings or lists"""
+
+    model = getSTmodel(emedding_model)
 
     xembed = model.encode(x)
     yembed = model.encode(y)
 
     simscore = cos_sim(xembed, yembed)
+
+    # extract the diagonal convert to list
+    score_list = simscore.diagonal().tolist()
+
+    # return a float or list accoring to the call
+    if len(score_list) == 1:
+        result = float(simscore)
+    else:
+        result = score_list
     
-    return float(simscore)
+    return result
