@@ -32,7 +32,7 @@ class ModelCache:
             return self.cache[model_name]
         
         # Load the model
-        model = self._loadSTmodel(model_name)
+        model = SentenceTransformer(model_name)
         
         # Add to cache
         self.cache[model_name] = model
@@ -56,18 +56,3 @@ class ModelCache:
         """Check if a model is in the cache."""
         return model_name in self.cache
 
-    def _loadSTmodel(self, model_name:str, cache_dir:str = "model_cache") -> SentenceTransformer:
-       """Check the local file cache for SentenceTransformer model or download it"""
-    
-       # Do we have it on disk?
-       try:
-           model = SentenceTransformer(model_name, 
-                                       cache_folder = cache_dir,
-                                       local_files_only = True)
-       except:
-           # we didn't have it, so let's get it
-           model = SentenceTransformer(model_name, 
-                                       cache_folder = cache_dir, 
-                                       local_files_only = False)
-
-       return model
