@@ -6,7 +6,9 @@ from sentence_transformers.util import cos_sim
 
 from reactxen.agents.evaluation_agent.agent import EvaluationAgent
 
-from scenario_server.grading.util import getSTmodel
+from scenario_server.grading.util import ModelCache
+
+RecentSTmodels = ModelCache()
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.debug(f"debug: {__name__}")
@@ -96,7 +98,7 @@ def evaluation_agent(
 def cosine_similarity(x:str|List, y:str|List, emedding_model:str="all-MiniLM-L6-v2") -> float | List:
     """Cosine similarity between strings or lists"""
 
-    model = getSTmodel(emedding_model)
+    model = RecentSTmodels.get(emedding_model)
 
     xembed = model.encode(x)
     yembed = model.encode(y)
