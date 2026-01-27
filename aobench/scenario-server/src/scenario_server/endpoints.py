@@ -37,26 +37,6 @@ logger.debug(f"debug: {__name__}")
 REGISTERED_SCENARIO_HANDLERS = dict()
 
 
-class Answer(BaseModel):
-    scenario_id: str = Field(
-        description="Unique identifier for the scenario being answered"
-    )
-    answer: str = Field(
-        description=(
-            "Serialized answer content as a string. The answer must be encoded "
-            "using appropriate serialization methods (e.g., json.dumps() for JSON objects, "
-            "base64.b64encode() for binary data) depending on the handler implementation. "
-            "Refer to the specific scenario handler documentation for the expected format."
-        )
-    )
-
-
-class Submission(BaseModel):
-    submission: list[Answer] = Field(
-        description="List of answers for one or more scenarios in this submission"
-    )
-
-
 def register_scenario_handlers(handlers: list):
     global REGISTERED_SCENARIO_HANDLERS
 
@@ -75,6 +55,26 @@ def set_tracking_uri(tracking_uri: str):
 
     TRACKING_URI = tracking_uri
     mlflow.set_tracking_uri(uri=tracking_uri)
+
+
+class Answer(BaseModel):
+    scenario_id: str = Field(
+        description="Unique identifier for the scenario being answered"
+    )
+    answer: str = Field(
+        description=(
+            "Serialized answer content as a string. The answer must be encoded "
+            "using appropriate serialization methods (e.g., json.dumps() for JSON objects, "
+            "base64.b64encode() for binary data) depending on the handler implementation. "
+            "Refer to the specific scenario handler documentation for the expected format."
+        )
+    )
+
+
+class Submission(BaseModel):
+    submission: list[Answer] = Field(
+        description="List of answers for one or more scenarios in this submission"
+    )
 
 
 @post("/scenario-set/{scenario_set_id: str}/deferred-grading")
