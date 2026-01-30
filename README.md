@@ -17,7 +17,8 @@
 
 📄 [Paper](https://arxiv.org/pdf/2506.03828) | 🤗 [HF-Dataset](https://huggingface.co/datasets/ibm-research/AssetOpsBench) | 📢 [Blog](https://research.ibm.com/blog/asset-ops-benchmark) | [Contributors](#contributors)
 
-[![Kaggle](https://img.shields.io/badge/Kaggle-Benchmark-blue?logo=kaggle&logoColor=white&style=flat-square)](https://www.kaggle.com/benchmarks/ibm-research/asset-ops-bench/versions/1)
+[![Kaggle](https://img.shields.io/badge/Kaggle-Benchmark-blue?logo=kaggle&logoColor=white&style=flat-square)](https://www.kaggle.com/benchmarks/ibm-research/asset-ops-bench)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Playground-orange?style=flat-square)](https://huggingface.co/spaces/ibm-research/AssetOps-Bench)
 
 </div>
 
