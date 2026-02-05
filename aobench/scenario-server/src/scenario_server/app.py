@@ -37,14 +37,16 @@ class RequestTimingMiddleware:
             rid: str = "".join(random.choices(bag, k=12))
             request.state["rid"] = rid
 
-            logger.info(f"[{rid}] > request: {request.url.path} {request.client}")
+            rc = request.client
+            rp = request.url.path
+
+            logger.info(f"[{rid}] > request: {rp} {rc}")
+
             t1: float = time.perf_counter()
-
             await self.app(scope, receive, send)
+            t2: float = time.perf_counter() - t1
 
-            logger.info(
-                f"[{rid}] < response: {request.url.path}  {time.perf_counter() - t1:0.5f}"
-            )
+            logger.info(f"[{rid}] < response: {rp} {rc} ~ {t2:0.5f}")
         else:
             await self.app(scope, receive, send)
 
