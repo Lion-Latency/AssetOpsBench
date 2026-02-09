@@ -115,21 +115,20 @@ async def deferred_grading(
 
     try:
         grading_fn = REGISTERED_SCENARIO_HANDLERS[scenario_set_id].grade_responses
-
-        bt = BackgroundTask(
-            process_deferred_grading,
-            grading_id,
-            grading_fn,
-            data.model_dump(),
-            storage,
-        )
+        submission = data.model_dump()
 
         return Response(
             content=DeferredGradingState(
                 grading_id=grading_id,
                 status=DeferredGradingStatus.PROCESSING,
             ),
-            background=bt,
+            background=BackgroundTask(
+                process_deferred_grading,
+                grading_id,
+                grading_fn,
+                submission,
+                storage,
+            ),
         )
     except Exception as e:
         logger.exception(f"grading failed: {e}")
