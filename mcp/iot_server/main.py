@@ -1,0 +1,164 @@
+import os
+import json
+import logging
+from datetime import datetime
+from typing import Optional, List
+from mcp.server.fastmcp import FastMCP
+import couchdb3
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("iot-mcp-server")
+
+# Configuration from environment
+COUCHDB_URL = os.environ.get("COUCHDB_URL", "http://admin:password@localhost:5984")
+COUCHDB_DBNAME = os.environ.get("COUCHDB_DBNAME", "chiller")
+COUCHDB_USER = os.environ.get("COUCHDB_USERNAME", "admin")
+COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "password")
+
+# Initialize CouchDB
+try:
+    db = couchdb3.Database(
+        COUCHDB_DBNAME, url=COUCHDB_URL, user=COUCHDB_USER, password=COUCHDB_PASSWORD
+    )
+    logger.info(f"Connected to CouchDB: {COUCHDB_DBNAME}")
+except Exception as e:
+    logger.error(f"Failed to connect to CouchDB: {e}")
+    db = None
+
+mcp = FastMCP("IoTAgent")
+
+# Static site as per original requirement
+SITES = ["MAIN"]
+
+
+def get_asset_list() -> List[str]:
+    """Helper to fetch unique asset IDs from CouchDB."""
+    if not db:
+        return []
+
+    # Using a mango query to find unique asset_ids might be slow without an index,
+    # but for this benchmark we'll query documents and unique them.
+    # In a production environment, we'd use a CouchDB view.
+    try:
+        # We limit the fields to just asset_id to minimize data transfer
+        res = db.find(
+            {"asset_id": {"$exists": True}}, fields=["asset_id"], limit=100000
+        )
+        assets = {doc["asset_id"] for doc in res["docs"] if "asset_id" in doc}
+        return sorted(list(assets))
+    except Exception as e:
+        logger.error(f"Error fetching assets: {e}")
+        return []
+
+
+def get_sensor_list(assetnum: str) -> List[str]:
+    """Helper to fetch sensor names for a given asset from CouchDB."""
+    if not db:
+        return []
+
+    try:
+        # Get one document for the asset to inspect keys
+        res = db.find({"asset_id": assetnum}, limit=1)
+        if not res["docs"]:
+            return []
+
+        doc = res["docs"][0]
+        # Exclude metadata and standard fields
+        exclude = {"_id", "_rev", "asset_id", "timestamp"}
+        sensors = [key for key in doc.keys() if key not in exclude]
+        return sorted(sensors)
+    except Exception as e:
+        logger.error(f"Error fetching sensors for {assetnum}: {e}")
+        return []
+
+
+@mcp.tool()
+def sites() -> str:
+    """Retrieves a list of sites. Each site is represented by a name."""
+    return json.dumps({"sites": SITES})
+
+
+@mcp.tool()
+def assets(site_name: str) -> str:
+    """Returns a list of assets for a given site. Each asset includes an id and a name."""
+    if site_name not in SITES:
+        return json.dumps({"error": f"unknown site {site_name}"})
+
+    asset_list = get_asset_list()
+    return json.dumps(
+        {
+            "site_name": site_name,
+            "total_assets": len(asset_list),
+            "assets": asset_list,
+            "message": f"found {len(asset_list)} assets for site_name {site_name}.",
+        }
+    )
+
+
+@mcp.tool()
+def sensors(site_name: str, assetnum: str) -> str:
+    """Lists the sensors available for a specified asset at a given site."""
+    if site_name not in SITES:
+        return json.dumps({"error": f"unknown site {site_name}"})
+
+    sensor_list = get_sensor_list(assetnum)
+    if not sensor_list:
+        return json.dumps({"error": f"unknown assetnum {assetnum} or no sensors found"})
+
+    return json.dumps(
+        {
+            "site_name": site_name,
+            "assetnum": assetnum,
+            "total_sensors": len(sensor_list),
+            "sensors": sensor_list,
+            "message": f"found {len(sensor_list)} sensors for assetnum {assetnum} and site_name {site_name}.",
+        }
+    )
+
+
+@mcp.tool()
+def history(
+    site_name: str, assetnum: str, start: str, final: Optional[str] = None
+) -> str:
+    """Returns a list of historical sensor values for the specified asset(s) at a site within a given time range (start to final)."""
+    if not db:
+        return json.dumps({"error": "CouchDB not connected"})
+
+    try:
+        selector = {
+            "asset_id": assetnum,
+            "timestamp": {"$gte": datetime.fromisoformat(start).isoformat()},
+        }
+
+        if final:
+            selector["timestamp"]["$lt"] = datetime.fromisoformat(final).isoformat()
+            if start >= final:
+                return json.dumps({"error": "start >= final"})
+    except ValueError as e:
+        return json.dumps({"error": f"Invalid date format: {e}"})
+
+    logger.info(f"Querying CouchDB with selector: {selector}")
+    try:
+        res = db.find(
+            selector, limit=1000, sort=[{"asset_id": "asc"}, {"timestamp": "asc"}]
+        )
+        docs = res["docs"]
+        return json.dumps(
+            {
+                "site_name": site_name,
+                "assetnum": assetnum,
+                "total_observations": len(docs),
+                "start": start,
+                "final": final,
+                "observations": docs,
+                "message": f"found {len(docs)} observations.",
+            }
+        )
+    except Exception as e:
+        logger.error(f"CouchDB query failed: {e}")
+        return json.dumps({"error": str(e)})
+
+
+if __name__ == "__main__":
+    mcp.run()
