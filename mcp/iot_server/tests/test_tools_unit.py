@@ -50,7 +50,7 @@ async def test_sensors_dynamic_unit(mock_db):
     }
 
     contents, _ = await mcp.call_tool(
-        "sensors", {"site_name": "MAIN", "assetnum": "Chiller 1"}
+        "sensors", {"site_name": "MAIN", "asset_id": "Chiller 1"}
     )
     data = json.loads(contents[0].text)
 
@@ -72,7 +72,7 @@ async def test_history_unit(mock_db):
 
     contents, _ = await mcp.call_tool(
         "history",
-        {"site_name": "MAIN", "assetnum": "Chiller 1", "start": "2024-01-01T00:00:00"},
+        {"site_name": "MAIN", "asset_id": "Chiller 1", "start": "2024-01-01T00:00:00"},
     )
     data = json.loads(contents[0].text)
 

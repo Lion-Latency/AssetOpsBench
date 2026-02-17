@@ -39,7 +39,7 @@ async def test_assets_discovery():
 @pytest.mark.anyio
 async def test_sensors_error_site():
     contents, _ = await mcp.call_tool(
-        "sensors", {"site_name": "INVALID", "assetnum": "Chiller 6"}
+        "sensors", {"site_name": "INVALID", "asset_id": "Chiller 6"}
     )
     data = json.loads(contents[0].text)
     assert "error" in data
@@ -48,7 +48,7 @@ async def test_sensors_error_site():
 @pytest.mark.anyio
 async def test_sensors_error_asset():
     contents, _ = await mcp.call_tool(
-        "sensors", {"site_name": "MAIN", "assetnum": "INVALID"}
+        "sensors", {"site_name": "MAIN", "asset_id": "INVALID"}
     )
     data = json.loads(contents[0].text)
     assert "error" in data
@@ -61,7 +61,7 @@ async def test_sensors_error_asset():
 @pytest.mark.anyio
 async def test_sensors_success():
     contents, _ = await mcp.call_tool(
-        "sensors", {"site_name": "MAIN", "assetnum": "Chiller 6"}
+        "sensors", {"site_name": "MAIN", "asset_id": "Chiller 6"}
     )
     data = json.loads(contents[0].text)
     assert "sensors" in data
@@ -77,7 +77,7 @@ async def test_history_error_invalid_range():
         "history",
         {
             "site_name": "MAIN",
-            "assetnum": "Chiller 6",
+            "asset_id": "Chiller 6",
             "start": "2020-06-01T00:00:00",
             "final": "2020-05-01T00:00:00",
         },
@@ -90,7 +90,7 @@ async def test_history_error_invalid_range():
 @pytest.mark.anyio
 async def test_history_error_malformed_date():
     contents, _ = await mcp.call_tool(
-        "history", {"site_name": "MAIN", "assetnum": "Chiller 6", "start": "not-a-date"}
+        "history", {"site_name": "MAIN", "asset_id": "Chiller 6", "start": "not-a-date"}
     )
     data = json.loads(contents[0].text)
     assert "error" in data
@@ -103,7 +103,7 @@ async def test_history_error_malformed_date():
 async def test_history_success_simple():
     contents, _ = await mcp.call_tool(
         "history",
-        {"site_name": "MAIN", "assetnum": "Chiller 6", "start": "2020-06-01T00:00:00"},
+        {"site_name": "MAIN", "asset_id": "Chiller 6", "start": "2020-06-01T00:00:00"},
     )
     data = json.loads(contents[0].text)
     assert "observations" in data
@@ -119,7 +119,7 @@ async def test_history_success_range():
         "history",
         {
             "site_name": "MAIN",
-            "assetnum": "Chiller 6",
+            "asset_id": "Chiller 6",
             "start": "2020-06-01T00:00:00",
             "final": "2020-06-01T01:00:00",
         },

@@ -5,7 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY main.py .
+COPY tests/test_*.py tests/
 
 # Expose the port for SSE transport
 EXPOSE 8000

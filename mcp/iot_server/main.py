@@ -52,14 +52,14 @@ def get_asset_list() -> List[str]:
         return []
 
 
-def get_sensor_list(assetnum: str) -> List[str]:
+def get_sensor_list(asset_id: str) -> List[str]:
     """Helper to fetch sensor names for a given asset from CouchDB."""
     if not db:
         return []
 
     try:
         # Get one document for the asset to inspect keys
-        res = db.find({"asset_id": assetnum}, limit=1)
+        res = db.find({"asset_id": asset_id}, limit=1)
         if not res["docs"]:
             return []
 
@@ -69,7 +69,7 @@ def get_sensor_list(assetnum: str) -> List[str]:
         sensors = [key for key in doc.keys() if key not in exclude]
         return sorted(sensors)
     except Exception as e:
-        logger.error(f"Error fetching sensors for {assetnum}: {e}")
+        logger.error(f"Error fetching sensors for {asset_id}: {e}")
         return []
 
 
@@ -97,29 +97,29 @@ def assets(site_name: str) -> str:
 
 
 @mcp.tool()
-def sensors(site_name: str, assetnum: str) -> str:
+def sensors(site_name: str, asset_id: str) -> str:
     """Lists the sensors available for a specified asset at a given site."""
     if site_name not in SITES:
         return json.dumps({"error": f"unknown site {site_name}"})
 
-    sensor_list = get_sensor_list(assetnum)
+    sensor_list = get_sensor_list(asset_id)
     if not sensor_list:
-        return json.dumps({"error": f"unknown assetnum {assetnum} or no sensors found"})
+        return json.dumps({"error": f"unknown asset_id {asset_id} or no sensors found"})
 
     return json.dumps(
         {
             "site_name": site_name,
-            "assetnum": assetnum,
+            "asset_id": asset_id,
             "total_sensors": len(sensor_list),
             "sensors": sensor_list,
-            "message": f"found {len(sensor_list)} sensors for assetnum {assetnum} and site_name {site_name}.",
+            "message": f"found {len(sensor_list)} sensors for asset_id {asset_id} and site_name {site_name}.",
         }
     )
 
 
 @mcp.tool()
 def history(
-    site_name: str, assetnum: str, start: str, final: Optional[str] = None
+    site_name: str, asset_id: str, start: str, final: Optional[str] = None
 ) -> str:
     """Returns a list of historical sensor values for the specified asset(s) at a site within a given time range (start to final)."""
     if not db:
@@ -127,7 +127,7 @@ def history(
 
     try:
         selector = {
-            "asset_id": assetnum,
+            "asset_id": asset_id,
             "timestamp": {"$gte": datetime.fromisoformat(start).isoformat()},
         }
 
@@ -147,7 +147,7 @@ def history(
         return json.dumps(
             {
                 "site_name": site_name,
-                "assetnum": assetnum,
+                "asset_id": asset_id,
                 "total_observations": len(docs),
                 "start": start,
                 "final": final,
