@@ -1,7 +1,0 @@
-mcp
-fastmcp
-couchdb3
-pydantic
-pytest
-requests
-uvicorn

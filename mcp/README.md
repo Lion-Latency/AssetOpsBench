@@ -2,58 +2,49 @@
 
 This directory contains the MCP servers and infrastructure for the AssetOpsBench project.
 
-## Components
-
-- **IoT MCP Server**: A Python-based MCP server providing tools to interact with BMS (Building Management System) data.
-- **CouchDB**: A NoSQL database populated with sample chiller data.
-
 ## Quick Start
 
-### 1. Build and Start Services
-
-This starts both the IoT server and CouchDB. The first time it runs, it will also populate the `chiller` database with sample records.
+### 1. Start CouchDB
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-### 2. Verify everything is running
+### 2. Run servers locally
 
 ```bash
-docker compose ps
+uv run fastmcp run servers/iot/main.py
+uv run fastmcp run servers/utilities/main.py
 ```
-
-The `couchdb` service should have a status of `(healthy)`.
 
 ## Running Tests
 
 ### Unit Tests (No Services Required)
 
-Unit tests use mocked dependencies and can run without Docker:
-
 ```bash
-docker compose exec iot-server python3 -m pytest tests/test_tools.py -k "not integration"
-docker compose exec utilities-server python3 -m pytest tests
+uv run pytest servers/iot/tests/test_tools.py -k "not integration"
+uv run pytest servers/utilities/tests
 ```
 
-### Integration Tests (Requires Services)
+### Integration Tests (Requires CouchDB)
 
-Integration tests run against the live CouchDB instance and are skipped unless `COUCHDB_URL` is set (which is provided automatically inside Docker):
+Integration tests are skipped unless `COUCHDB_URL` is set (loaded from `.env` via `dotenv`):
 
 ```bash
-docker compose exec iot-server python3 -m pytest tests
-docker compose exec utilities-server python3 -m pytest tests
+docker compose up -d
+uv run pytest servers/iot/tests
+uv run pytest servers/utilities/tests
 ```
 
 ### Test Structure
 
 ```
-iot_server/tests/
+servers/iot/tests/
   conftest.py       # shared fixtures (mock_db, no_db) and requires_couchdb marker
   test_tools.py     # unit + integration tests for all 4 tools
   test_couchdb.py   # CouchDB infrastructure/connectivity tests
 
-utilities_server/tests/
+servers/utilities/tests/
   conftest.py        # shared call_tool helper
   test_utilities.py  # tests for json_reader and time tools
 ```

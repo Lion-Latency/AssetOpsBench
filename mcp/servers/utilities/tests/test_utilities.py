@@ -5,7 +5,7 @@ import os
 import tempfile
 
 import pytest
-from main import mcp
+from servers.utilities.main import mcp
 from conftest import call_tool
 
 
@@ -63,9 +63,7 @@ class TestCurrentTimeEnglish:
 class TestJsonReader:
     @pytest.mark.anyio
     async def test_reads_valid_json(self):
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             json.dump({"test": "data"}, tmp)
             tmp_name = tmp.name
 
@@ -78,9 +76,7 @@ class TestJsonReader:
     @pytest.mark.anyio
     async def test_reads_nested_json(self):
         payload = {"a": [1, 2, 3], "b": {"nested": True}}
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             json.dump(payload, tmp)
             tmp_name = tmp.name
 
@@ -99,9 +95,7 @@ class TestJsonReader:
 
     @pytest.mark.anyio
     async def test_invalid_json_content(self):
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             tmp.write("not valid json {{{")
             tmp_name = tmp.name
 

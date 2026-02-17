@@ -5,7 +5,7 @@ Unit tests use a mocked CouchDB; integration tests require a live instance
 """
 
 import pytest
-from main import mcp
+from servers.iot.main import mcp
 from conftest import requires_couchdb, call_tool
 
 

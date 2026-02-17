@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("utilities-mcp-server")
 
-mcp = FastMCP("Utilities")
+mcp = FastMCP("Utilities", port=8001)
 
 # --- Helper Functions ---
 

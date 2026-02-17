@@ -1,9 +1,11 @@
 import json
 import os
 
+from dotenv import load_dotenv
 import pytest
 from unittest.mock import patch
 
+load_dotenv()
 
 # --- Custom markers ---
 
@@ -19,14 +21,14 @@ requires_couchdb = pytest.mark.skipif(
 @pytest.fixture
 def mock_db():
     """Patch the module-level `db` object in main with a mock."""
-    with patch("main.db") as mock:
+    with patch("servers.iot.main.db") as mock:
         yield mock
 
 
 @pytest.fixture
 def no_db():
     """Patch the module-level `db` to None (simulate disconnected CouchDB)."""
-    with patch("main.db", None):
+    with patch("servers.iot.main.db", None):
         yield
 
 

@@ -5,16 +5,19 @@ from datetime import datetime
 from typing import Optional, List
 from mcp.server.fastmcp import FastMCP
 import couchdb3
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("iot-mcp-server")
 
 # Configuration from environment
-COUCHDB_URL = os.environ.get("COUCHDB_URL", "http://admin:password@localhost:5984")
-COUCHDB_DBNAME = os.environ.get("COUCHDB_DBNAME", "chiller")
-COUCHDB_USER = os.environ.get("COUCHDB_USERNAME", "admin")
-COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "password")
+COUCHDB_URL = os.environ.get("COUCHDB_URL")
+COUCHDB_DBNAME = os.environ.get("COUCHDB_DBNAME")
+COUCHDB_USER = os.environ.get("COUCHDB_USERNAME")
+COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD")
 
 # Initialize CouchDB
 try:
@@ -26,7 +29,7 @@ except Exception as e:
     logger.error(f"Failed to connect to CouchDB: {e}")
     db = None
 
-mcp = FastMCP("IoTAgent")
+mcp = FastMCP("IoTAgent", port=8000)
 
 # Static site as per original requirement
 SITES = ["MAIN"]
