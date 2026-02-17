@@ -4,18 +4,73 @@ This directory contains the MCP servers and infrastructure for the AssetOpsBench
 
 ## Quick Start
 
+### 0. Install dependencies
+
+We use `uv` for dependency and environment management.
+
+```bash
+uv sync
+```
+
 ### 1. Start CouchDB
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Run servers locally
+Validate CouchDB is running:
 
 ```bash
-uv run fastmcp run servers/iot/main.py
-uv run fastmcp run servers/utilities/main.py
+curl -X GET http://localhost:5984/
 ```
+
+### 2. Run servers locally
+
+Use `uv run` to run the mcp servers:
+
+```bash
+uv run python servers/utilities/main.py
+uv run python servers/iot/main.py
+```
+
+## [Optional] Connect to MCP Client: Claude Desktop
+
+Add the following to your Claude Desktop `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "utilities": {
+      "command": "/path/to/uv",
+      "args": [
+        "run",
+        "--project",
+        "/path/to/AssetOpsBench/mcp",
+        "python",
+        "/path/to/AssetOpsBench/mcp/servers/utilities/main.py"
+      ]
+    },
+    "IoTAgent": {
+      "command": "/path/to/uv",
+      "args": [
+        "run",
+        "--project",
+        "/path/to/AssetOpsBench/mcp",
+        "python",
+        "/path/to/AssetOpsBench/mcp/servers/iot/main.py"
+      ]
+    }
+  },
+  "preferences": {
+    "sidebarMode": "chat",
+    "coworkScheduledTasksEnabled": false
+  }
+}
+```
+
+## [WIP] Connect to MCP Client: Local Client with Custom Agentic Orchestration
+
+TBD.
 
 ## Running Tests
 
@@ -34,19 +89,6 @@ Integration tests are skipped unless `COUCHDB_URL` is set (loaded from `.env` vi
 docker compose up -d
 uv run pytest servers/iot/tests
 uv run pytest servers/utilities/tests
-```
-
-### Test Structure
-
-```
-servers/iot/tests/
-  conftest.py       # shared fixtures (mock_db, no_db) and requires_couchdb marker
-  test_tools.py     # unit + integration tests for all 4 tools
-  test_couchdb.py   # CouchDB infrastructure/connectivity tests
-
-servers/utilities/tests/
-  conftest.py        # shared call_tool helper
-  test_utilities.py  # tests for json_reader and time tools
 ```
 
 ## Architecture

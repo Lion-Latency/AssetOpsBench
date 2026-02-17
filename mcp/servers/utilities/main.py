@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("utilities-mcp-server")
 
-mcp = FastMCP("Utilities", port=8001)
+mcp = FastMCP("Utilities")
 
 # --- Helper Functions ---
 
@@ -78,5 +78,10 @@ def current_time_english() -> str:
     return json.dumps({"english": eng, "iso": now_iso})
 
 
+def main():
+    # Initialize and run the server
+    mcp.run(transport="stdio")
+
+
 if __name__ == "__main__":
-    mcp.run()
+    main()

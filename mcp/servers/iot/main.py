@@ -29,7 +29,7 @@ except Exception as e:
     logger.error(f"Failed to connect to CouchDB: {e}")
     db = None
 
-mcp = FastMCP("IoTAgent", port=8000)
+mcp = FastMCP("IoTAgent")
 
 # Static site as per original requirement
 SITES = ["MAIN"]
@@ -163,5 +163,10 @@ def history(
         return json.dumps({"error": str(e)})
 
 
+def main():
+    # Initialize and run the server
+    mcp.run(transport="stdio")
+
+
 if __name__ == "__main__":
-    mcp.run()
+    main()
