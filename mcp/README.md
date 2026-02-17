@@ -14,8 +14,7 @@ This directory contains the MCP servers and infrastructure for the AssetOpsBench
 This starts both the IoT server and CouchDB. The first time it runs, it will also populate the `chiller` database with sample records.
 
 ```bash
-docker compose build
-docker compose up -d
+docker compose up -d --build
 ```
 
 ### 2. Verify everything is running
@@ -28,13 +27,35 @@ The `couchdb` service should have a status of `(healthy)`.
 
 ## Running Tests
 
+### Unit Tests (No Services Required)
+
+Unit tests use mocked dependencies and can run without Docker:
+
+```bash
+docker compose exec iot-server python3 -m pytest tests/test_tools.py -k "not integration"
+docker compose exec utilities-server python3 -m pytest tests
+```
+
 ### Integration Tests (Requires Services)
 
-These tests run against the live CouchDB instance. Run them inside the existing `iot-server` container:
+Integration tests run against the live CouchDB instance and are skipped unless `COUCHDB_URL` is set (which is provided automatically inside Docker):
 
 ```bash
 docker compose exec iot-server python3 -m pytest tests
 docker compose exec utilities-server python3 -m pytest tests
+```
+
+### Test Structure
+
+```
+iot_server/tests/
+  conftest.py       # shared fixtures (mock_db, no_db) and requires_couchdb marker
+  test_tools.py     # unit + integration tests for all 4 tools
+  test_couchdb.py   # CouchDB infrastructure/connectivity tests
+
+utilities_server/tests/
+  conftest.py        # shared call_tool helper
+  test_utilities.py  # tests for json_reader and time tools
 ```
 
 ## Architecture
