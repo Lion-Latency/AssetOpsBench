@@ -1,0 +1,52 @@
+services:
+  # orchestrator:
+  #   build: ./orchestrator
+  #   depends_on:
+  #     - iot-server
+  #   environment:
+  #     IOT_SERVER_URL: http://iot-server:8000
+  #   networks:
+  #     - agent-net
+
+  iot-server:
+    build: ./iot_server
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_DBNAME: chiller
+      COUCHDB_USERNAME: admin
+      COUCHDB_PASSWORD: password
+      PYTHONPATH: .
+    volumes:
+      - ./iot_server:/app
+    networks:
+      - agent-net
+
+  couchdb:
+    image: couchdb:3.3
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: password
+      COUCHDB_USERNAME: admin
+      COUCHDB_DBNAME: chiller
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+      - ./couchdb/couchdb_setup.sh:/opt/couchdb/etc/couchdb_setup.sh
+      - ./couchdb/sample_data:/sample_data
+    command: ["sh", "/opt/couchdb/etc/couchdb_setup.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - agent-net
+
+volumes:
+  couchdb-data:
+
+networks:
+  agent-net:
+    driver: bridge
