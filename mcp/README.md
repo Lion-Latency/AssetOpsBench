@@ -28,31 +28,36 @@ The `couchdb` service should have a status of `(healthy)`.
 
 ## Running Tests
 
-### 1. Unit Tests (Fast & Local)
-
-These tests use **mocks** and do not require CouchDB or Docker. They are ideal for rapid development.
-
-```bash
-# Install dependencies first
-pip install -r iot_server/requirements.txt
-
-# Run unit tests
-pytest iot_server/tests/test_tools_unit.py
-```
-
-### 2. Integration Tests (Requires Services)
+### Integration Tests (Requires Services)
 
 These tests run against the live CouchDB instance. Run them inside the existing `iot-server` container:
 
 ```bash
 docker compose exec iot-server python3 -m pytest tests
+docker compose exec utilities-server python3 -m pytest tests
 ```
 
-## MCP Tools
+## Architecture
 
-The **IoTAgent** server provides the following tools:
-
-- `sites()`: List available sites (currently returns `["MAIN"]`).
-- `assets(site_name)`: List assets (dynamically discovered from CouchDB).
-- `sensors(site_name, assetnum)`: List sensors for an asset (dynamically discovered from CouchDB).
-- `history(site_name, assetnum, start, final)`: Fetch historical sensor data from CouchDB.
+```
+┌─────────────────────────────────────────────┐
+│           SERVER-SIDE RUNTIME               │
+│                                             │
+│  ┌──────────────────────────────────────┐   │
+│  │     ReAct Orchestrator (MCP Client)  │   │
+│  │                                      │   │
+│  │  Thought → Action → Observation loop │   │
+│  │                                      │   │
+│  │  1. Reason about the goal            │   │
+│  │  2. Pick a tool (from MCP servers)   │   │
+│  │  3. Call it                          │   │
+│  │  4. Observe result                   │   │
+│  │  5. Repeat until done                │   │
+│  └──────────┬───────────────────────────┘   │
+│             │ MCP protocol                  │
+│    ┌────────┼────────┐                      │
+│    ▼        ▼        ▼                      │
+│  iot       fmsr    tsfm    ...              │
+│  (tools)  (tools)  (tools)                  │
+└─────────────────────────────────────────────┘
+```
