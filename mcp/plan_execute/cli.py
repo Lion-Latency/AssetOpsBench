@@ -174,6 +174,8 @@ async def _run(args: argparse.Namespace) -> None:
                     "step": s.step_number,
                     "task": s.task,
                     "agent": s.agent,
+                    "tool": s.tool,
+                    "tool_args": s.tool_args,
                     "dependencies": s.dependencies,
                     "expected_output": s.expected_output,
                 }
@@ -199,6 +201,7 @@ async def _run(args: argparse.Namespace) -> None:
         for step in result.plan.steps:
             deps = ", ".join(f"#{d}" for d in step.dependencies) or "none"
             print(f"  [{step.step_number}] {step.agent}: {step.task}")
+            print(f"       tool: {step.tool}  args: {step.tool_args}")
             print(f"       deps={deps} | expected: {step.expected_output}")
 
     if args.show_history:
