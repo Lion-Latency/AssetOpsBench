@@ -6,7 +6,7 @@ This directory contains the MCP servers and infrastructure for the AssetOpsBench
 
 ### 0. Install dependencies
 
-We use `uv` for dependency and environment management.
+We use `uv` for dependency and environment management. Run from the **repo root**:
 
 ```bash
 uv sync
@@ -26,11 +26,11 @@ curl -X GET http://localhost:5984/
 
 ### 2. Run servers locally
 
-Use `uv run` to run the mcp servers:
+Use `uv run` to run the MCP servers (paths are relative to repo root):
 
 ```bash
-uv run python servers/utilities/main.py
-uv run python servers/iot/main.py
+uv run python mcp/servers/utilities/main.py
+uv run python mcp/servers/iot/main.py
 ```
 
 ## [Optional] Connect to MCP Client: Claude Desktop
@@ -45,7 +45,7 @@ Add the following to your Claude Desktop `claude_desktop_config.json`:
       "args": [
         "run",
         "--project",
-        "/path/to/AssetOpsBench/mcp",
+        "/path/to/AssetOpsBench",
         "python",
         "/path/to/AssetOpsBench/mcp/servers/utilities/main.py"
       ]
@@ -55,7 +55,7 @@ Add the following to your Claude Desktop `claude_desktop_config.json`:
       "args": [
         "run",
         "--project",
-        "/path/to/AssetOpsBench/mcp",
+        "/path/to/AssetOpsBench",
         "python",
         "/path/to/AssetOpsBench/mcp/servers/iot/main.py"
       ]
@@ -115,7 +115,7 @@ Common flags:
 plan-execute --model-id 19 --show-plan "List sensors for asset CH-1"
 
 # Register an additional MCP server
-plan-execute --server FMSRAgent=servers/fmsr/main.py "What are the failure modes?"
+plan-execute --server FMSRAgent=mcp/servers/fmsr/main.py "What are the failure modes?"
 
 # Machine-readable output
 plan-execute --show-history --json "How many observations exist for CH-1?" | jq .answer
@@ -173,9 +173,9 @@ from plan_execute import PlanExecuteRunner
 runner = PlanExecuteRunner(
     llm=my_llm,
     server_paths={
-        "IoTAgent":  Path("servers/iot/main.py"),
-        "Utilities": Path("servers/utilities/main.py"),
-        "FMSRAgent": Path("servers/fmsr/main.py"),   # once implemented
+        "IoTAgent":  Path("mcp/servers/iot/main.py"),
+        "Utilities": Path("mcp/servers/utilities/main.py"),
+        "FMSRAgent": Path("mcp/servers/fmsr/main.py"),   # once implemented
     },
 )
 ```
@@ -186,17 +186,17 @@ runner = PlanExecuteRunner(
 
 ```bash
 # MCP servers
-uv run pytest servers/iot/tests/test_tools.py -k "not integration"
-uv run pytest servers/utilities/tests
+uv run pytest mcp/servers/iot/tests/test_tools.py -k "not integration"
+uv run pytest mcp/servers/utilities/tests
 
 # plan_execute (all unit tests, no CouchDB or WatsonX needed)
-uv run pytest plan_execute/tests/
+uv run pytest mcp/plan_execute/tests/
 ```
 
 Run the full non-integration suite in one command:
 
 ```bash
-uv run pytest servers/iot/tests/test_tools.py servers/utilities/tests plan_execute/tests/ -k "not integration"
+uv run pytest mcp/servers/iot/tests/test_tools.py mcp/servers/utilities/tests mcp/plan_execute/tests/ -k "not integration"
 ```
 
 ### Integration Tests (Requires CouchDB)
@@ -205,8 +205,8 @@ Integration tests are skipped unless `COUCHDB_URL` is set (loaded from `.env` vi
 
 ```bash
 docker compose up -d
-uv run pytest servers/iot/tests
-uv run pytest servers/utilities/tests
+uv run pytest mcp/servers/iot/tests
+uv run pytest mcp/servers/utilities/tests
 ```
 
 ## Architecture

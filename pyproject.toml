@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["plan_execute"]
+packages = ["mcp/plan_execute"]
 
 [project]
 name = "assetopsbench-mcp"
 version = "0.1.0"
 description = "Add your description here"
-readme = "README.md"
+readme = "mcp/README.md"
 requires-python = ">=3.14"
 dependencies = [
     "couchdb3>=2.0.2",
@@ -42,5 +42,5 @@ dev = [
 package = true
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["mcp"]
 
