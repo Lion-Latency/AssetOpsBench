@@ -2,77 +2,117 @@
 
 This directory contains the MCP servers and infrastructure for the AssetOpsBench project.
 
+## Contents
+
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [MCP Servers](#mcp-servers)
+  - [IoTAgent](#iotagent)
+  - [Utilities](#utilities)
+- [Plan-Execute Runner](#plan-execute-runner)
+  - [How it works](#how-it-works)
+  - [CLI](#cli)
+  - [Python API](#python-api)
+  - [Bring your own LLM](#bring-your-own-llm)
+  - [Add more MCP servers](#add-more-mcp-servers)
+- [Connect to Claude Desktop](#connect-to-claude-desktop)
+- [Running Tests](#running-tests)
+- [Architecture](#architecture)
+
+---
+
+## Prerequisites
+
+- **Python 3.14+** — required by `pyproject.toml`
+- **[uv](https://docs.astral.sh/uv/)** — dependency and environment manager
+- **Docker** — for running CouchDB (IoT data store)
+
 ## Quick Start
 
-### 0. Install dependencies
+### 1. Install dependencies
 
-We use `uv` for dependency and environment management. Run from the **repo root**:
+Run from the **repo root**:
 
 ```bash
 uv sync
 ```
 
-### 1. Start CouchDB
+### 2. Configure environment
+
+Copy `mcp/.env` and fill in the required values (see [Environment Variables](#environment-variables)):
+
+```bash
+cp mcp/.env mcp/.env.local  # optional; load_dotenv picks up mcp/.env automatically
+```
+
+### 3. Start CouchDB
 
 ```bash
 docker compose -f mcp/couchdb/docker-compose.yaml up -d
 ```
 
-Validate CouchDB is running:
+Verify CouchDB is running:
 
 ```bash
 curl -X GET http://localhost:5984/
 ```
 
-### 2. Run servers locally
+### 4. Run servers locally
 
-Use `uv run` to run the MCP servers (paths are relative to repo root):
+Use `uv run` to start the MCP servers (paths relative to repo root):
 
 ```bash
 uv run python mcp/servers/utilities/main.py
 uv run python mcp/servers/iot/main.py
 ```
 
-## [Optional] Connect to MCP Client: Claude Desktop
+---
 
-Add the following to your Claude Desktop `claude_desktop_config.json`:
+## Environment Variables
 
-```json
-{
-  "mcpServers": {
-    "utilities": {
-      "command": "/path/to/uv",
-      "args": [
-        "run",
-        "--project",
-        "/path/to/AssetOpsBench",
-        "python",
-        "/path/to/AssetOpsBench/mcp/servers/utilities/main.py"
-      ]
-    },
-    "IoTAgent": {
-      "command": "/path/to/uv",
-      "args": [
-        "run",
-        "--project",
-        "/path/to/AssetOpsBench",
-        "python",
-        "/path/to/AssetOpsBench/mcp/servers/iot/main.py"
-      ]
-    }
-  },
-  "preferences": {
-    "sidebarMode": "chat",
-    "coworkScheduledTasksEnabled": false
-  }
-}
-```
+| Variable | Required | Description |
+|---|---|---|
+| `COUCHDB_URL` | IoT server | CouchDB connection URL, e.g. `http://localhost:5984` |
+| `COUCHDB_DBNAME` | IoT server | Database name (default fixture: `chiller`) |
+| `COUCHDB_USERNAME` | IoT server | CouchDB admin username |
+| `COUCHDB_PASSWORD` | IoT server | CouchDB admin password |
+| `WATSONX_APIKEY` | plan-execute | IBM WatsonX API key |
+| `WATSONX_PROJECT_ID` | plan-execute | IBM WatsonX project ID |
+| `WATSONX_URL` | plan-execute | WatsonX endpoint (optional; defaults to `https://us-south.ml.cloud.ibm.com`) |
 
-## Plan-Execute Runner (Custom Agentic Orchestration)
+---
 
-`plan_execute/` is a custom MCP client that implements a **plan-and-execute**
-workflow over the MCP servers.  It replaces AgentHive's bespoke orchestration
-with the standard MCP protocol.
+## MCP Servers
+
+### IoTAgent
+
+**Path:** `mcp/servers/iot/main.py`
+**Requires:** CouchDB (`COUCHDB_URL`, `COUCHDB_DBNAME`, `COUCHDB_USERNAME`, `COUCHDB_PASSWORD`)
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `sites` | — | List all available sites |
+| `assets` | `site_name` | List all asset IDs for a site |
+| `sensors` | `site_name`, `asset_id` | List sensor names for an asset |
+| `history` | `site_name`, `asset_id`, `start`, `final?` | Fetch historical sensor readings for a time range (ISO 8601 timestamps) |
+
+### Utilities
+
+**Path:** `mcp/servers/utilities/main.py`
+**Requires:** nothing (no external services)
+
+| Tool | Arguments | Description |
+|---|---|---|
+| `json_reader` | `file_name` | Read and parse a JSON file from disk |
+| `current_date_time` | — | Return the current UTC date and time as JSON |
+| `current_time_english` | — | Return the current UTC time as a human-readable string |
+
+---
+
+## Plan-Execute Runner
+
+`mcp/plan_execute/` is a custom MCP client that implements a **plan-and-execute** workflow over the MCP servers. It replaces AgentHive's bespoke orchestration with the standard MCP protocol.
 
 ### How it works
 
@@ -100,15 +140,17 @@ After `uv sync`, the `plan-execute` command is available:
 plan-execute "What assets are available at site MAIN?"
 ```
 
-Common flags:
+Flags:
 
 | Flag | Description |
 |---|---|
 | `--model-id INT` | WatsonX model ID (default: `16` = llama-4-maverick) |
-| `--server NAME=PATH` | Register an extra MCP server (repeatable) |
+| `--server NAME=PATH` | Override MCP servers with `NAME=PATH` pairs (repeatable) |
 | `--show-plan` | Print the generated plan before execution |
 | `--show-history` | Print each step result after execution |
 | `--json` | Output answer + plan + history as JSON |
+
+Examples:
 
 ```bash
 # Use a different model and inspect the plan
@@ -119,14 +161,6 @@ plan-execute --server FMSRAgent=mcp/servers/fmsr/main.py "What are the failure m
 
 # Machine-readable output
 plan-execute --show-history --json "How many observations exist for CH-1?" | jq .answer
-```
-
-`WatsonXLLM` reads credentials from the environment:
-
-```bash
-export WATSONX_APIKEY=...
-export WATSONX_PROJECT_ID=...
-export WATSONX_URL=https://us-south.ml.cloud.ibm.com   # optional
 ```
 
 ### Python API
@@ -141,9 +175,17 @@ result = asyncio.run(runner.run("What assets are available at site MAIN?"))
 print(result.answer)
 ```
 
+`OrchestratorResult` fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `answer` | `str` | Final synthesised answer |
+| `plan` | `Plan` | The generated plan with its steps |
+| `history` | `list[StepResult]` | Per-step execution results |
+
 ### Bring your own LLM
 
-Implement `LLMBackend` to use any other model:
+Implement `LLMBackend` to use any model:
 
 ```python
 from plan_execute.llm import LLMBackend
@@ -157,8 +199,7 @@ runner = PlanExecuteRunner(llm=MyLLM())
 
 ### Add more MCP servers
 
-Pass `server_paths` to register additional servers.  Keys must match the
-agent names the planner assigns steps to:
+Pass `server_paths` to register additional servers. Keys must match the agent names the planner assigns steps to:
 
 ```python
 from pathlib import Path
@@ -174,14 +215,51 @@ runner = PlanExecuteRunner(
 )
 ```
 
+> **Note:** passing `server_paths` replaces the defaults entirely. Include all servers you need.
+
+---
+
+## Connect to Claude Desktop
+
+Add the following to your Claude Desktop `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "utilities": {
+      "command": "/path/to/uv",
+      "args": [
+        "run",
+        "--project",
+        "/path/to/AssetOpsBench",
+        "python",
+        "/path/to/AssetOpsBench/mcp/servers/utilities/main.py"
+      ]
+    },
+    "IoTAgent": {
+      "command": "/path/to/uv",
+      "args": [
+        "run",
+        "--project",
+        "/path/to/AssetOpsBench",
+        "python",
+        "/path/to/AssetOpsBench/mcp/servers/iot/main.py"
+      ]
+    }
+  }
+}
+```
+
+---
+
 ## Running Tests
 
-### Unit Tests (No Services Required)
+### Unit tests (no services required)
 
 ```bash
 # MCP servers
 uv run pytest mcp/servers/iot/tests/test_tools.py -k "not integration"
-uv run pytest mcp/servers/utilities/tests
+uv run pytest mcp/servers/utilities/tests/
 
 # plan_execute (all unit tests, no CouchDB or WatsonX needed)
 uv run pytest mcp/plan_execute/tests/
@@ -190,18 +268,20 @@ uv run pytest mcp/plan_execute/tests/
 Run the full non-integration suite in one command:
 
 ```bash
-uv run pytest mcp/servers/iot/tests/test_tools.py mcp/servers/utilities/tests mcp/plan_execute/tests/ -k "not integration"
+uv run pytest mcp/servers/iot/tests/test_tools.py mcp/servers/utilities/tests/ mcp/plan_execute/tests/ -k "not integration"
 ```
 
-### Integration Tests (Requires CouchDB)
+### Integration tests (requires CouchDB)
 
 Integration tests are skipped unless `COUCHDB_URL` is set (loaded from `.env` via `dotenv`):
 
 ```bash
 docker compose -f mcp/couchdb/docker-compose.yaml up -d
-uv run pytest mcp/servers/iot/tests
-uv run pytest mcp/servers/utilities/tests
+uv run pytest mcp/servers/iot/tests/
+uv run pytest mcp/servers/utilities/tests/
 ```
+
+---
 
 ## Architecture
 
