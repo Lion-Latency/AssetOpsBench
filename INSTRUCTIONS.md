@@ -79,9 +79,11 @@ uv run python mcp/servers/iot/main.py
 | `COUCHDB_DBNAME` | IoT server | Database name (default fixture: `chiller`) |
 | `COUCHDB_USERNAME` | IoT server | CouchDB admin username |
 | `COUCHDB_PASSWORD` | IoT server | CouchDB admin password |
-| `WATSONX_APIKEY` | plan-execute | IBM WatsonX API key |
-| `WATSONX_PROJECT_ID` | plan-execute | IBM WatsonX project ID |
-| `WATSONX_URL` | plan-execute | WatsonX endpoint (optional; defaults to `https://us-south.ml.cloud.ibm.com`) |
+| `WATSONX_APIKEY` | `--platform watsonx` | IBM WatsonX API key |
+| `WATSONX_PROJECT_ID` | `--platform watsonx` | IBM WatsonX project ID |
+| `WATSONX_URL` | `--platform watsonx` | WatsonX endpoint (optional; defaults to `https://us-south.ml.cloud.ibm.com`) |
+| `LITELLM_API_KEY` | `--platform litellm` | LiteLLM API key |
+| `LITELLM_BASE_URL` | `--platform litellm` | LiteLLM base URL (e.g. `https://your-litellm-host.example.com`) |
 
 ---
 

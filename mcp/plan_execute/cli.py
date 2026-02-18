@@ -28,10 +28,13 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Run a question through the MCP plan-execute workflow.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-environment variables (watsonx platform):
-  WATSONX_APIKEY        IBM WatsonX API key (required)
-  WATSONX_PROJECT_ID    IBM WatsonX project ID (required)
+environment variables:
+  WATSONX_APIKEY        IBM WatsonX API key (required for --platform watsonx)
+  WATSONX_PROJECT_ID    IBM WatsonX project ID (required for --platform watsonx)
   WATSONX_URL           IBM WatsonX endpoint (optional, defaults to us-south)
+
+  LITELLM_API_KEY       LiteLLM API key (required for --platform litellm)
+  LITELLM_BASE_URL      LiteLLM base URL (required for --platform litellm)
 
   LOG_LEVEL             Log level for MCP servers when run standalone (default: WARNING)
 
@@ -116,8 +119,16 @@ def _build_llm(platform: str, model_id: str):
             sys.exit(1)
 
     if platform == "litellm":
-        print("error: litellm platform is not yet implemented", file=sys.stderr)
-        sys.exit(1)
+        try:
+            from llm.litellm import LiteLLMLLM
+        except ImportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            return LiteLLMLLM(model_id=model_id)
+        except KeyError as exc:
+            print(f"error: missing environment variable {exc}", file=sys.stderr)
+            sys.exit(1)
 
     print(f"error: unknown platform {platform!r}", file=sys.stderr)
     sys.exit(1)
