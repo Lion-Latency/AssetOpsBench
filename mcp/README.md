@@ -92,16 +92,33 @@ PlanExecuteRunner.run(question)
   └─ 4. Summarise  LLM synthesises step results into a final answer
 ```
 
-### Usage
+### CLI
 
-```python
-import asyncio
-from plan_execute import PlanExecuteRunner
-from plan_execute.llm import WatsonXLLM
+After `uv sync`, the `plan-execute` command is available:
 
-runner = PlanExecuteRunner(llm=WatsonXLLM(model_id=16))
-result = asyncio.run(runner.run("What assets are available at site MAIN?"))
-print(result.answer)
+```bash
+plan-execute "What assets are available at site MAIN?"
+```
+
+Common flags:
+
+| Flag | Description |
+|---|---|
+| `--model-id INT` | WatsonX model ID (default: `16` = llama-4-maverick) |
+| `--server NAME=PATH` | Register an extra MCP server (repeatable) |
+| `--show-plan` | Print the generated plan before execution |
+| `--show-history` | Print each step result after execution |
+| `--json` | Output answer + plan + history as JSON |
+
+```bash
+# Use a different model and inspect the plan
+plan-execute --model-id 19 --show-plan "List sensors for asset CH-1"
+
+# Register an additional MCP server
+plan-execute --server FMSRAgent=servers/fmsr/main.py "What are the failure modes?"
+
+# Machine-readable output
+plan-execute --show-history --json "How many observations exist for CH-1?" | jq .answer
 ```
 
 `WatsonXLLM` reads credentials from the environment:
@@ -116,6 +133,18 @@ Install the optional WatsonX dependency if you have not done so:
 
 ```bash
 uv pip install ".[watsonx]"
+```
+
+### Python API
+
+```python
+import asyncio
+from plan_execute import PlanExecuteRunner
+from plan_execute.llm import WatsonXLLM
+
+runner = PlanExecuteRunner(llm=WatsonXLLM(model_id=16))
+result = asyncio.run(runner.run("What assets are available at site MAIN?"))
+print(result.answer)
 ```
 
 ### Bring your own LLM
