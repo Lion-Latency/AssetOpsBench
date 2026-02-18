@@ -58,7 +58,7 @@ class Executor:
         server_paths: dict[str, Path] | None = None,
     ) -> None:
         self._llm = llm
-        self._server_paths = server_paths or DEFAULT_SERVER_PATHS
+        self._server_paths = DEFAULT_SERVER_PATHS if server_paths is None else server_paths
 
     async def get_agent_descriptions(self) -> dict[str, str]:
         """Query each registered MCP server and return a capability summary.
