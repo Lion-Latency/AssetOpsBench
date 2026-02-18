@@ -129,12 +129,6 @@ export WATSONX_PROJECT_ID=...
 export WATSONX_URL=https://us-south.ml.cloud.ibm.com   # optional
 ```
 
-Install the optional WatsonX dependency if you have not done so:
-
-```bash
-uv pip install ".[watsonx]"
-```
-
 ### Python API
 
 ```python
