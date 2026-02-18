@@ -14,8 +14,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llm import LLMBackend
+
 from .executor import Executor
-from .llm import LLMBackend
 from .models import OrchestratorResult
 from .planner import Planner
 
@@ -39,7 +40,7 @@ class PlanExecuteRunner:
     Usage::
 
         from plan_execute import PlanExecuteRunner
-        from plan_execute.llm import WatsonXLLM
+        from llm import WatsonXLLM
 
         runner = PlanExecuteRunner(llm=WatsonXLLM(model_id=16))
         result = await runner.run("What are the assets at site MAIN?")

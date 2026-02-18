@@ -2,7 +2,7 @@
 
 Usage:
     plan-execute "What assets are available at site MAIN?"
-    plan-execute --model-id 19 --show-plan "List sensors for asset CH-1"
+    plan-execute --platform watsonx --model-id 19 --show-plan "List sensors for asset CH-1"
     plan-execute --server FMSRAgent=servers/fmsr/main.py "What are the failure modes?"
     plan-execute --json "What is the current time?"
 """
@@ -15,6 +15,8 @@ import json
 import sys
 from pathlib import Path
 
+_PLATFORMS = ["watsonx", "litellm"]
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -22,25 +24,31 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Run a question through the MCP plan-execute workflow.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-environment variables:
+environment variables (watsonx platform):
   WATSONX_APIKEY        IBM WatsonX API key (required)
   WATSONX_PROJECT_ID    IBM WatsonX project ID (required)
   WATSONX_URL           IBM WatsonX endpoint (optional, defaults to us-south)
 
 examples:
   plan-execute "What assets are at site MAIN?"
-  plan-execute --model-id 19 --show-plan "List sensors for asset CH-1"
+  plan-execute --platform watsonx --model-id 19 --show-plan "List sensors for asset CH-1"
   plan-execute --server FMSRAgent=servers/fmsr/main.py "What are the failure modes?"
   plan-execute --show-history --json "How many IoT observations exist for CH-1?"
 """,
     )
     parser.add_argument("question", help="The question to answer.")
     parser.add_argument(
+        "--platform",
+        choices=_PLATFORMS,
+        default="watsonx",
+        help="LLM platform to use (default: watsonx).",
+    )
+    parser.add_argument(
         "--model-id",
         type=int,
         default=16,
         metavar="INT",
-        help="WatsonX integer model ID (default: 16 = llama-4-maverick).",
+        help="Model ID passed to the selected platform (default: 16 = llama-4-maverick on watsonx).",
     )
     parser.add_argument(
         "--server",
@@ -73,6 +81,28 @@ examples:
     return parser
 
 
+def _build_llm(platform: str, model_id: int):
+    """Instantiate the LLM backend for the given platform."""
+    if platform == "watsonx":
+        try:
+            from llm.watsonx import WatsonXLLM
+        except ImportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            return WatsonXLLM(model_id=model_id)
+        except KeyError as exc:
+            print(f"error: missing environment variable {exc}", file=sys.stderr)
+            sys.exit(1)
+
+    if platform == "litellm":
+        print("error: litellm platform is not yet implemented", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"error: unknown platform {platform!r}", file=sys.stderr)
+    sys.exit(1)
+
+
 def _parse_servers(entries: list[str]) -> dict[str, Path] | None:
     """Parse NAME=PATH pairs into a server_paths dict, or None if empty."""
     if not entries:
@@ -91,20 +121,9 @@ def _parse_servers(entries: list[str]) -> dict[str, Path] | None:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    try:
-        from plan_execute.llm import WatsonXLLM
-    except ImportError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        llm = WatsonXLLM(model_id=args.model_id)
-    except KeyError as exc:
-        print(f"error: missing environment variable {exc}", file=sys.stderr)
-        sys.exit(1)
-
     from plan_execute.runner import PlanExecuteRunner
 
+    llm = _build_llm(args.platform, args.model_id)
     server_paths = _parse_servers(args.servers)
     runner = PlanExecuteRunner(llm=llm, server_paths=server_paths)
     result = await runner.run(args.question)

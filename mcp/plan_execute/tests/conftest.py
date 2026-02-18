@@ -2,7 +2,7 @@
 
 import pytest
 
-from plan_execute.llm import LLMBackend
+from llm import LLMBackend
 
 
 class MockLLM(LLMBackend):

@@ -145,7 +145,8 @@ Flags:
 
 | Flag | Description |
 |---|---|
-| `--model-id INT` | WatsonX model ID (default: `16` = llama-4-maverick) |
+| `--platform PLATFORM` | LLM platform to use: `watsonx` (default), `litellm` (coming soon) |
+| `--model-id INT` | Model ID for the selected platform (default: `16` = llama-4-maverick on watsonx) |
 | `--server NAME=PATH` | Override MCP servers with `NAME=PATH` pairs (repeatable) |
 | `--show-plan` | Print the generated plan before execution |
 | `--show-history` | Print each step result after execution |

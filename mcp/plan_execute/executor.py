@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .llm import LLMBackend
+from llm import LLMBackend
 from .models import Plan, PlanStep, StepResult
 
 _MCP_ROOT = Path(__file__).parent.parent

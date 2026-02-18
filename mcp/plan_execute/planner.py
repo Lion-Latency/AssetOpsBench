@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from .llm import LLMBackend
+from llm import LLMBackend
 from .models import Plan, PlanStep
 
 _PLAN_PROMPT = """\
