@@ -1,4 +1,4 @@
-"""Tests for PlanExecuteOrchestrator and Executor._select_tool_call."""
+"""Tests for PlanExecuteRunner and Executor._select_tool_call."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from client.executor import Executor, _parse_tool_call
-from client.orchestrator import PlanExecuteOrchestrator
+from plan_execute.executor import Executor, _parse_tool_call
+from plan_execute.runner import PlanExecuteRunner
 
 # ── shared plan strings ───────────────────────────────────────────────────────
 
@@ -39,9 +39,9 @@ _TOOL_RESPONSE = json.dumps({"sites": ["MAIN"]})
 
 def _patch_mcp(tool_response: str = _TOOL_RESPONSE):
     return (
-        patch("client.executor._list_tools", new=AsyncMock(return_value=_MOCK_TOOLS)),
+        patch("plan_execute.executor._list_tools", new=AsyncMock(return_value=_MOCK_TOOLS)),
         patch(
-            "client.executor._call_tool", new=AsyncMock(return_value=tool_response)
+            "plan_execute.executor._call_tool", new=AsyncMock(return_value=tool_response)
         ),
     )
 
@@ -60,7 +60,7 @@ async def test_orchestrator_run_returns_result(sequential_llm):
         ]
     )
     with _patch_mcp()[0], _patch_mcp()[1]:
-        result = await PlanExecuteOrchestrator(llm).run("What are the IoT sites?")
+        result = await PlanExecuteRunner(llm).run("What are the IoT sites?")
 
     assert result.question == "What are the IoT sites?"
     assert result.answer == _FINAL_ANSWER
@@ -74,7 +74,7 @@ async def test_orchestrator_all_steps_succeed(sequential_llm):
         [_TWO_STEP_PLAN, _TOOL_CALL_SITES, _TOOL_CALL_TIME, _FINAL_ANSWER]
     )
     with _patch_mcp()[0], _patch_mcp()[1]:
-        result = await PlanExecuteOrchestrator(llm).run("Q")
+        result = await PlanExecuteRunner(llm).run("Q")
 
     assert all(r.success for r in result.history)
 
@@ -89,7 +89,7 @@ async def test_orchestrator_unknown_agent_recorded_as_error(sequential_llm):
     )
     llm = sequential_llm([bad_plan, _FINAL_ANSWER])
     with _patch_mcp()[0], _patch_mcp()[1]:
-        result = await PlanExecuteOrchestrator(llm).run("Q")
+        result = await PlanExecuteRunner(llm).run("Q")
 
     assert len(result.history) == 1
     assert result.history[0].success is False
@@ -108,7 +108,7 @@ async def test_orchestrator_direct_answer_from_context(sequential_llm):
     )
     llm = sequential_llm([single_step_plan, direct, "Final: 42"])
     with _patch_mcp()[0], _patch_mcp()[1]:
-        result = await PlanExecuteOrchestrator(llm).run("Simple Q")
+        result = await PlanExecuteRunner(llm).run("Simple Q")
 
     assert result.history[0].response == "42"
     assert result.history[0].success is True
@@ -122,7 +122,7 @@ async def test_executor_unknown_agent(mock_llm):
     llm = mock_llm(_TOOL_CALL_SITES)
     executor = Executor(llm, server_paths={})  # no servers registered
 
-    from client.models import Plan, PlanStep
+    from plan_execute.models import Plan, PlanStep
 
     plan = Plan(
         steps=[
@@ -149,7 +149,7 @@ async def test_executor_get_agent_descriptions(mock_llm):
     executor = Executor(llm, server_paths={"TestServer": None})
 
     with patch(
-        "client.executor._list_tools",
+        "plan_execute.executor._list_tools",
         new=AsyncMock(
             return_value=[{"name": "foo", "description": "does foo"}]
         ),

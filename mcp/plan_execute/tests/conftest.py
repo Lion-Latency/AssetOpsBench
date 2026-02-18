@@ -1,8 +1,8 @@
-"""Shared fixtures for client unit tests."""
+"""Shared fixtures for plan_execute unit tests."""
 
 import pytest
 
-from client.llm import LLMBackend
+from plan_execute.llm import LLMBackend
 
 
 class MockLLM(LLMBackend):

@@ -1,9 +1,9 @@
-"""Plan-execute orchestrator using MCP servers as tool providers.
+"""Entry-point runner for the plan-execute workflow using MCP servers.
 
 Replaces AgentHive's combination of PlanningWorkflow + SequentialWorkflow with
 an MCP-native implementation:
 
-  AgentHive                       MCP Client
+  AgentHive                       plan_execute
   ────────────────────────────    ─────────────────────────────
   PlanningWorkflow.generate_steps → Planner.generate_plan
   SequentialWorkflow.run          → Executor.execute_plan
@@ -33,16 +33,16 @@ above. Do not repeat the individual steps — just give the final answer.
 """
 
 
-class PlanExecuteOrchestrator:
-    """Orchestrates plan-and-execute workflows using MCP servers as tool providers.
+class PlanExecuteRunner:
+    """Entry-point for plan-and-execute workflows using MCP servers as tool providers.
 
     Usage::
 
-        from client import PlanExecuteOrchestrator
-        from client.llm import WatsonXLLM
+        from plan_execute import PlanExecuteRunner
+        from plan_execute.llm import WatsonXLLM
 
-        orchestrator = PlanExecuteOrchestrator(llm=WatsonXLLM(model_id=16))
-        result = await orchestrator.run("What are the assets at site MAIN?")
+        runner = PlanExecuteRunner(llm=WatsonXLLM(model_id=16))
+        result = await runner.run("What are the assets at site MAIN?")
         print(result.answer)
 
     Args:

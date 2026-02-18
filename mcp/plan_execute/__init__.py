@@ -1,10 +1,10 @@
-"""MCP plan-execute orchestration client."""
+"""MCP plan-execute orchestration package."""
 
-from .orchestrator import PlanExecuteOrchestrator
+from .runner import PlanExecuteRunner
 from .models import OrchestratorResult, Plan, PlanStep, StepResult
 
 __all__ = [
-    "PlanExecuteOrchestrator",
+    "PlanExecuteRunner",
     "OrchestratorResult",
     "Plan",
     "PlanStep",
