@@ -45,10 +45,9 @@ examples:
     )
     parser.add_argument(
         "--model-id",
-        type=int,
-        default=16,
-        metavar="INT",
-        help="Model ID passed to the selected platform (default: 16 = llama-4-maverick on watsonx).",
+        default="meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
+        metavar="MODEL_ID",
+        help="Model ID string for the selected platform (default: meta-llama/llama-4-maverick-17b-128e-instruct-fp8).",
     )
     parser.add_argument(
         "--server",

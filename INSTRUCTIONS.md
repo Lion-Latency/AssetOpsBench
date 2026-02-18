@@ -146,7 +146,7 @@ Flags:
 | Flag | Description |
 |---|---|
 | `--platform PLATFORM` | LLM platform to use: `watsonx` (default), `litellm` (coming soon) |
-| `--model-id INT` | Model ID for the selected platform (default: `16` = llama-4-maverick on watsonx) |
+| `--model-id MODEL_ID` | Model ID string for the selected platform (default: `meta-llama/llama-4-maverick-17b-128e-instruct-fp8`) |
 | `--server NAME=PATH` | Override MCP servers with `NAME=PATH` pairs (repeatable) |
 | `--show-plan` | Print the generated plan before execution |
 | `--show-history` | Print each step result after execution |
@@ -156,7 +156,7 @@ Examples:
 
 ```bash
 # Use a different model and inspect the plan
-plan-execute --model-id 19 --show-plan "List sensors for asset CH-1"
+plan-execute --model-id ibm/granite-3-3-8b-instruct --show-plan "List sensors for asset CH-1"
 
 # Register an additional MCP server
 plan-execute --server FMSRAgent=mcp/servers/fmsr/main.py "What are the failure modes?"

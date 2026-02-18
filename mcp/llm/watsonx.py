@@ -20,24 +20,19 @@ class WatsonXLLM(LLMBackend):
         WATSONX_URL          — optional (defaults to us-south)
 
     Args:
-        model_id: Integer model ID following the project convention.
-                  16 → llama-4-maverick, 19 → granite-3-3-8b.
+        model_id: WatsonX model ID string, e.g.
+                  "meta-llama/llama-4-maverick-17b-128e-instruct-fp8".
     """
-
-    MODEL_MAP: dict[int, str] = {
-        16: "meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
-        19: "ibm/granite-3-3-8b-instruct",
-    }
 
     _IAM_URL = "https://iam.cloud.ibm.com/identity/token"
     _GENERATION_PATH = "/ml/v1/text/generation?version=2023-05-29"
 
-    def __init__(self, model_id: int = 16) -> None:
+    def __init__(self, model_id: str = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8") -> None:
         self._api_key = os.environ["WATSONX_APIKEY"]
         self._project_id = os.environ["WATSONX_PROJECT_ID"]
         base_url = os.environ.get("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
         self._generation_url = base_url.rstrip("/") + self._GENERATION_PATH
-        self._model_name = self.MODEL_MAP.get(model_id, self.MODEL_MAP[16])
+        self._model_name = model_id
         self._token: str | None = None
         self._token_expiry: float = 0.0
 
