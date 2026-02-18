@@ -9,7 +9,7 @@ packages = ["mcp/plan_execute"]
 name = "assetopsbench-mcp"
 version = "0.1.0"
 description = "Add your description here"
-readme = "mcp/README.md"
+readme = "INSTRUCTIONS.md"
 requires-python = ">=3.14"
 dependencies = [
     "couchdb3>=2.0.2",
