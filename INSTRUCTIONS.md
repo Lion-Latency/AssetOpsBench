@@ -40,10 +40,11 @@ uv sync
 
 ### 2. Configure environment
 
-Copy `mcp/.env` and fill in the required values (see [Environment Variables](#environment-variables)):
+Fill in the required values in `.env` at the repo root (see [Environment Variables](#environment-variables)):
 
 ```bash
-cp mcp/.env mcp/.env.local  # optional; load_dotenv picks up mcp/.env automatically
+# Edit .env and set WATSONX_APIKEY, WATSONX_PROJECT_ID
+# CouchDB defaults work out of the box with the Docker setup
 ```
 
 ### 3. Start CouchDB
