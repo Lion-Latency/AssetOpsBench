@@ -40,10 +40,11 @@ uv sync
 
 ### 2. Configure environment
 
-Fill in the required values in `.env` at the repo root (see [Environment Variables](#environment-variables)):
+Copy `.env.public` to `.env` and fill in the required values (see [Environment Variables](#environment-variables)):
 
 ```bash
-# Edit .env and set WATSONX_APIKEY, WATSONX_PROJECT_ID
+cp .env.public .env
+# Then edit .env and set WATSONX_APIKEY, WATSONX_PROJECT_ID
 # CouchDB defaults work out of the box with the Docker setup
 ```
 
