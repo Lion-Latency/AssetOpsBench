@@ -15,7 +15,7 @@ uv sync
 ### 1. Start CouchDB
 
 ```bash
-docker compose up -d
+docker compose -f mcp/couchdb/docker-compose.yaml up -d
 ```
 
 Validate CouchDB is running:
@@ -204,7 +204,7 @@ uv run pytest mcp/servers/iot/tests/test_tools.py mcp/servers/utilities/tests mc
 Integration tests are skipped unless `COUCHDB_URL` is set (loaded from `.env` via `dotenv`):
 
 ```bash
-docker compose up -d
+docker compose -f mcp/couchdb/docker-compose.yaml up -d
 uv run pytest mcp/servers/iot/tests
 uv run pytest mcp/servers/utilities/tests
 ```

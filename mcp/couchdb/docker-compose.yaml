@@ -9,8 +9,8 @@ services:
       - "5984:5984"
     volumes:
       - couchdb-data:/opt/couchdb/data
-      - ./couchdb/couchdb_setup.sh:/opt/couchdb/etc/couchdb_setup.sh
-      - ./couchdb/sample_data:/sample_data
+      - ./couchdb_setup.sh:/opt/couchdb/etc/couchdb_setup.sh
+      - ./sample_data:/sample_data
     command: ["sh", "/opt/couchdb/etc/couchdb_setup.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/"]
