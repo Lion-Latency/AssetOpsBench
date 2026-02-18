@@ -13,6 +13,8 @@ class PlanStep:
     step_number: int
     task: str
     agent: str
+    tool: str
+    tool_args: dict
     dependencies: list[int]
     expected_output: str
 

@@ -8,6 +8,8 @@ def _step(n: int, deps: list[int] | None = None) -> PlanStep:
         step_number=n,
         task=f"Task {n}",
         agent="IoTAgent",
+        tool="sites",
+        tool_args={},
         dependencies=deps or [],
         expected_output="output",
     )

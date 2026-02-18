@@ -5,27 +5,37 @@ from plan_execute.planner import Planner, parse_plan
 _TWO_STEP = """\
 #Task1: List all available IoT sites
 #Agent1: IoTAgent
+#Tool1: sites
+#Args1: {}
 #Dependency1: None
 #ExpectedOutput1: A list of site names
 
 #Task2: Get assets at site MAIN
 #Agent2: IoTAgent
+#Tool2: assets
+#Args2: {"site_name": "MAIN"}
 #Dependency2: #S1
 #ExpectedOutput2: A list of asset IDs"""
 
 _MULTI_DEP = """\
 #Task1: Get sites
 #Agent1: IoTAgent
+#Tool1: sites
+#Args1: {}
 #Dependency1: None
 #ExpectedOutput1: Sites
 
 #Task2: Get current time
 #Agent2: Utilities
+#Tool2: current_date_time
+#Args2: {}
 #Dependency2: None
 #ExpectedOutput2: Current time
 
 #Task3: Combine results
 #Agent3: Utilities
+#Tool3: none
+#Args3: {}
 #Dependency3: #S1, #S2
 #ExpectedOutput3: Combined output"""
 
@@ -51,6 +61,16 @@ class TestParsePlan:
         plan = parse_plan(_TWO_STEP)
         assert plan.steps[0].agent == "IoTAgent"
         assert plan.steps[1].agent == "IoTAgent"
+
+    def test_tool_names(self):
+        plan = parse_plan(_TWO_STEP)
+        assert plan.steps[0].tool == "sites"
+        assert plan.steps[1].tool == "assets"
+
+    def test_tool_args_parsed(self):
+        plan = parse_plan(_TWO_STEP)
+        assert plan.steps[0].tool_args == {}
+        assert plan.steps[1].tool_args == {"site_name": "MAIN"}
 
     def test_no_dependency(self):
         plan = parse_plan(_TWO_STEP)
@@ -80,6 +100,18 @@ class TestParsePlan:
         plan = parse_plan(_NO_TASKS)
         assert plan.steps == []
 
+    def test_invalid_args_json_falls_back_to_empty(self):
+        raw = (
+            "#Task1: Do something\n"
+            "#Agent1: IoTAgent\n"
+            "#Tool1: sites\n"
+            "#Args1: not-valid-json\n"
+            "#Dependency1: None\n"
+            "#ExpectedOutput1: result\n"
+        )
+        plan = parse_plan(raw)
+        assert plan.steps[0].tool_args == {}
+
 
 class TestPlanner:
     def test_generate_plan_uses_llm_output(self, mock_llm):
@@ -87,10 +119,11 @@ class TestPlanner:
         planner = Planner(llm)
         plan = planner.generate_plan(
             "List all assets",
-            {"IoTAgent": "Tools: sites, assets, sensors, history"},
+            {"IoTAgent": "  - sites(): List sites\n  - assets(site_name: string): List assets"},
         )
         assert len(plan.steps) == 2
         assert plan.steps[0].agent == "IoTAgent"
+        assert plan.steps[1].tool == "assets"
 
     def test_generate_plan_prompt_contains_question(self, mock_llm, monkeypatch):
         captured = []
@@ -100,7 +133,7 @@ class TestPlanner:
 
         Planner(llm).generate_plan(
             "What sensors exist for CH-1?",
-            {"IoTAgent": "IoT tools"},
+            {"IoTAgent": "  - sites(): List sites"},
         )
         assert "What sensors exist for CH-1?" in captured[0]
 
@@ -112,7 +145,7 @@ class TestPlanner:
 
         Planner(llm).generate_plan(
             "Q",
-            {"IoTAgent": "IoT tools", "Utilities": "Utility tools"},
+            {"IoTAgent": "  - sites(): List sites", "Utilities": "  - current_date_time(): Get time"},
         )
         assert "IoTAgent" in captured[0]
         assert "Utilities" in captured[0]
