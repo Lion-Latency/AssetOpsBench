@@ -2,7 +2,7 @@
 
 Usage:
     plan-execute "What assets are available at site MAIN?"
-    plan-execute --platform watsonx --model-id 19 --show-plan "List sensors for asset CH-1"
+    plan-execute --platform watsonx --model-id ibm/granite-3-3-8b-instruct --show-plan "List sensors"
     plan-execute --server FMSRAgent=servers/fmsr/main.py "What are the failure modes?"
     plan-execute --json "What is the current time?"
 """
@@ -12,10 +12,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import sys
 from pathlib import Path
 
 _PLATFORMS = ["watsonx", "litellm"]
+
+_LOG_FORMAT = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"
+_LOG_DATE_FORMAT = "%H:%M:%S"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -29,11 +33,13 @@ environment variables (watsonx platform):
   WATSONX_PROJECT_ID    IBM WatsonX project ID (required)
   WATSONX_URL           IBM WatsonX endpoint (optional, defaults to us-south)
 
+  LOG_LEVEL             Log level for MCP servers when run standalone (default: WARNING)
+
 examples:
   plan-execute "What assets are at site MAIN?"
-  plan-execute --platform watsonx --model-id 19 --show-plan "List sensors for asset CH-1"
+  plan-execute --platform watsonx --model-id ibm/granite-3-3-8b-instruct --show-plan "List sensors"
   plan-execute --server FMSRAgent=servers/fmsr/main.py "What are the failure modes?"
-  plan-execute --show-history --json "How many IoT observations exist for CH-1?"
+  plan-execute --verbose --show-history --json "How many IoT observations exist for CH-1?"
 """,
     )
     parser.add_argument("question", help="The question to answer.")
@@ -77,10 +83,25 @@ examples:
         dest="output_json",
         help="Output the full result (answer, plan, history) as JSON.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show INFO-level progress logs on stderr (default: WARNING+ only).",
+    )
     return parser
 
 
-def _build_llm(platform: str, model_id: int):
+def _setup_logging(verbose: bool) -> None:
+    """Configure root logger to stderr; level depends on --verbose."""
+    level = logging.INFO if verbose else logging.WARNING
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATE_FORMAT))
+    logging.root.handlers.clear()
+    logging.root.addHandler(handler)
+    logging.root.setLevel(level)
+
+
+def _build_llm(platform: str, model_id: str):
     """Instantiate the LLM backend for the given platform."""
     if platform == "watsonx":
         try:
@@ -119,6 +140,12 @@ def _parse_servers(entries: list[str]) -> dict[str, Path] | None:
     return result
 
 
+def _print_section(title: str) -> None:
+    print(f"\n{'─' * 60}")
+    print(f"  {title}")
+    print(f"{'─' * 60}")
+
+
 async def _run(args: argparse.Namespace) -> None:
     from plan_execute.runner import PlanExecuteRunner
 
@@ -126,24 +153,6 @@ async def _run(args: argparse.Namespace) -> None:
     server_paths = _parse_servers(args.servers)
     runner = PlanExecuteRunner(llm=llm, server_paths=server_paths)
     result = await runner.run(args.question)
-
-    if args.show_plan:
-        print("=== Plan ===")
-        for step in result.plan.steps:
-            deps = ", ".join(f"#{d}" for d in step.dependencies) or "none"
-            print(f"  Step {step.step_number} [{step.agent}]: {step.task}")
-            print(f"    deps={deps}  expected: {step.expected_output}")
-        print()
-
-    if args.show_history:
-        print("=== Execution History ===")
-        for r in result.history:
-            status = "OK" if r.success else "ERROR"
-            print(f"  [{status}] Step {r.step_number} ({r.agent}): {r.task}")
-            detail = r.response if r.success else f"Error: {r.error}"
-            snippet = detail[:200] + ("..." if len(detail) > 200 else "")
-            print(f"    {snippet}")
-        print()
 
     if args.output_json:
         output = {
@@ -172,12 +181,32 @@ async def _run(args: argparse.Namespace) -> None:
             ],
         }
         print(json.dumps(output, indent=2))
-    else:
-        print(result.answer)
+        return
+
+    if args.show_plan:
+        _print_section("Plan")
+        for step in result.plan.steps:
+            deps = ", ".join(f"#{d}" for d in step.dependencies) or "none"
+            print(f"  [{step.step_number}] {step.agent}: {step.task}")
+            print(f"       deps={deps} | expected: {step.expected_output}")
+
+    if args.show_history:
+        _print_section("Execution History")
+        for r in result.history:
+            status = "OK " if r.success else "ERR"
+            print(f"  [{status}] Step {r.step_number} ({r.agent}): {r.task}")
+            detail = r.response if r.success else f"Error: {r.error}"
+            snippet = detail[:200] + ("..." if len(detail) > 200 else "")
+            print(f"        {snippet}")
+
+    _print_section("Answer")
+    print(result.answer)
+    print()
 
 
 def main() -> None:
     args = _build_parser().parse_args()
+    _setup_logging(args.verbose)
     asyncio.run(_run(args))
 
 

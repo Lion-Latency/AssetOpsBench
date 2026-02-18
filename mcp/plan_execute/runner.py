@@ -12,9 +12,12 @@ an MCP-native implementation:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from llm import LLMBackend
+
+_log = logging.getLogger(__name__)
 
 from .executor import Executor
 from .models import OrchestratorResult
@@ -79,15 +82,19 @@ class PlanExecuteRunner:
             the per-step execution history.
         """
         # 1. Discover
+        _log.info("Discovering agent capabilities...")
         agent_descriptions = await self._executor.get_agent_descriptions()
 
         # 2. Plan
+        _log.info("Planning...")
         plan = self._planner.generate_plan(question, agent_descriptions)
+        _log.info("Plan has %d step(s).", len(plan.steps))
 
         # 3. Execute
         history = await self._executor.execute_plan(plan, question)
 
         # 4. Summarise
+        _log.info("Summarising...")
         results_text = "\n\n".join(
             f"Step {r.step_number} — {r.task} (agent: {r.agent}):\n"
             + (r.response if r.success else f"ERROR: {r.error}")

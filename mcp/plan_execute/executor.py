@@ -8,11 +8,14 @@ arguments.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from llm import LLMBackend
 from .models import Plan, PlanStep, StepResult
+
+_log = logging.getLogger(__name__)
 
 _MCP_ROOT = Path(__file__).parent.parent
 
@@ -87,10 +90,20 @@ class Executor:
         Returns:
             List of StepResult in execution order.
         """
+        ordered = plan.resolved_order()
+        total = len(ordered)
         context: dict[int, StepResult] = {}
         results: list[StepResult] = []
-        for step in plan.resolved_order():
+        for step in ordered:
+            _log.info(
+                "Step %d/%d [%s]: %s",
+                step.step_number, total, step.agent, step.task,
+            )
             result = await self.execute_step(step, context, question)
+            if result.success:
+                _log.info("Step %d OK.", step.step_number)
+            else:
+                _log.warning("Step %d FAILED: %s", step.step_number, result.error)
             context[step.step_number] = result
             results.append(result)
         return results

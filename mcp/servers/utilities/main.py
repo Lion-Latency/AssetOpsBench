@@ -10,8 +10,12 @@ import pendulum
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+import os
+
+# Setup logging — default WARNING so stderr stays quiet when used as MCP server;
+# set LOG_LEVEL=INFO (or DEBUG) in the environment to see verbose output.
+_log_level = getattr(logging, os.environ.get("LOG_LEVEL", "WARNING").upper(), logging.WARNING)
+logging.basicConfig(level=_log_level)
 logger = logging.getLogger("utilities-mcp-server")
 
 mcp = FastMCP("Utilities")
