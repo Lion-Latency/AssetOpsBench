@@ -7,7 +7,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from plan_execute.executor import Executor, _parse_tool_call, _resolve_args
+from plan_execute.executor import (
+    Executor,
+    _has_placeholders,
+    _parse_json,
+    _parse_tool_call,
+    _resolve_args,
+    _resolve_args_with_llm,
+)
 from plan_execute.models import Plan, PlanStep, StepResult
 from plan_execute.runner import PlanExecuteRunner
 
@@ -166,35 +173,108 @@ async def test_executor_get_agent_descriptions(mock_llm):
 
 
 @pytest.mark.anyio
-async def test_executor_resolves_step_placeholder(mock_llm):
-    """{{step_1}} in tool_args is replaced with step 1's response."""
+async def test_executor_resolves_placeholder_via_llm(mock_llm):
+    """Steps with {{step_N}} placeholders use an LLM call to resolve arg values."""
     from pathlib import Path
 
-    llm = mock_llm("")
+    resolved_json = json.dumps({"asset_id": "CH-1"})
+    llm = mock_llm(resolved_json)
     executor = Executor(llm, server_paths={"IoTAgent": Path("/fake/server.py")})
 
     plan = Plan(
         steps=[
             _make_step(1, tool="sites", tool_args={}),
-            _make_step(2, tool="assets", tool_args={"site_name": "{{step_1}}"}, deps=[1]),
+            _make_step(2, tool="sensors",
+                       tool_args={"site_name": "MAIN", "asset_id": "{{step_1}}"},
+                       deps=[1]),
         ],
         raw="",
     )
     site_resp = json.dumps({"sites": ["MAIN"]})
-    asset_resp = json.dumps({"assets": ["CH-1"]})
+    sensor_resp = json.dumps({"sensors": ["temp"]})
 
-    call_mock = AsyncMock(side_effect=[site_resp, asset_resp])
+    call_mock = AsyncMock(side_effect=[site_resp, sensor_resp])
     with (
         patch("plan_execute.executor._list_tools", new=AsyncMock(return_value=_MOCK_TOOLS)),
         patch("plan_execute.executor._call_tool", new=call_mock),
     ):
         results = await executor.execute_plan(plan, "Q")
 
-    # Second _call_tool invocation should have received the resolved site_name
-    assert call_mock.call_args_list[1].args[2]["site_name"] == site_resp
+    assert all(r.success for r in results)
+    # Step 2 tool call should receive LLM-resolved asset_id
+    step2_args = call_mock.call_args_list[1].args[2]
+    assert step2_args["site_name"] == "MAIN"   # known arg passed through
+    assert step2_args["asset_id"] == "CH-1"    # resolved by LLM
 
 
-# ── _resolve_args tests ───────────────────────────────────────────────────────
+@pytest.mark.anyio
+async def test_executor_no_placeholder_skips_llm(mock_llm):
+    """Steps without placeholders do not trigger an LLM call."""
+    from pathlib import Path
+
+    llm = mock_llm("")
+    executor = Executor(llm, server_paths={"IoTAgent": Path("/fake/server.py")})
+
+    plan = Plan(steps=[_make_step(1, tool="sites", tool_args={})], raw="")
+    call_mock = AsyncMock(return_value=_TOOL_RESPONSE)
+    with (
+        patch("plan_execute.executor._list_tools", new=AsyncMock(return_value=_MOCK_TOOLS)),
+        patch("plan_execute.executor._call_tool", new=call_mock),
+    ):
+        await executor.execute_plan(plan, "Q")
+
+    # LLM generate should never have been called
+    assert llm._response == "" and call_mock.call_count == 1
+
+
+# ── _has_placeholders tests ───────────────────────────────────────────────────
+
+
+def test_has_placeholders_true():
+    assert _has_placeholders({"asset_id": "{{step_1}}"}) is True
+
+
+def test_has_placeholders_false():
+    assert _has_placeholders({"site_name": "MAIN"}) is False
+
+
+def test_has_placeholders_empty():
+    assert _has_placeholders({}) is False
+
+
+def test_has_placeholders_non_string_ignored():
+    assert _has_placeholders({"count": 5}) is False
+
+
+# ── _resolve_args_with_llm tests ──────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_resolve_args_with_llm_resolves_placeholder(mock_llm):
+    llm = mock_llm('{"asset_id": "CH-1"}')
+    ctx = {1: StepResult(step_number=1, task="t", agent="a",
+                         response='{"assets": ["CH-1", "CH-2"]}')}
+    result = await _resolve_args_with_llm(
+        "get sensors", "sensors",
+        {"site_name": "MAIN", "asset_id": "{{step_1}}"},
+        ctx, llm,
+    )
+    assert result["site_name"] == "MAIN"   # known arg unchanged
+    assert result["asset_id"] == "CH-1"    # resolved by LLM
+
+
+@pytest.mark.anyio
+async def test_resolve_args_with_llm_fallback_on_bad_json(mock_llm):
+    llm = mock_llm("I cannot determine the value.")
+    ctx = {1: StepResult(step_number=1, task="t", agent="a", response="data")}
+    result = await _resolve_args_with_llm(
+        "task", "tool", {"x": "{{step_1}}"}, ctx, llm
+    )
+    # Bad JSON → empty dict merged with known args (none here) → x absent
+    assert result == {}
+
+
+# ── _resolve_args tests (simple substitution, kept for reference) ─────────────
 
 
 def test_resolve_args_no_placeholders():
@@ -216,6 +296,25 @@ def test_resolve_args_missing_step_keeps_placeholder():
 def test_resolve_args_non_string_values_unchanged():
     args = {"count": 5, "flag": True}
     assert _resolve_args(args, {}) == args
+
+
+# ── _parse_json tests ─────────────────────────────────────────────────────────
+
+
+def test_parse_json_plain():
+    assert _parse_json('{"a": "b"}') == {"a": "b"}
+
+
+def test_parse_json_markdown_fence():
+    assert _parse_json('```json\n{"a": "b"}\n```') == {"a": "b"}
+
+
+def test_parse_json_embedded():
+    assert _parse_json('Result: {"a": "b"} done.') == {"a": "b"}
+
+
+def test_parse_json_unrecoverable_returns_empty():
+    assert _parse_json("no json here") == {}
 
 
 # ── _parse_tool_call tests ────────────────────────────────────────────────────

@@ -1,9 +1,14 @@
 """MCP-based step executor for the plan-execute orchestrator.
 
-Each PlanStep already contains the tool name and arguments decided by the
-planner, so the executor calls the tool directly with no additional LLM calls.
-Step argument values may contain {{step_N}} placeholders that are resolved
-from prior step results at execution time.
+Each PlanStep contains the tool name and arguments decided by the planner.
+Argument values may contain {{step_N}} placeholders for values that can only
+be determined after a prior step runs.  When placeholders are detected the
+executor makes a targeted LLM call to resolve the concrete values from the
+prior step's result, then calls the tool.
+
+LLM call budget per question:
+  - Independent steps (no placeholders): 0 extra LLM calls — tool called directly.
+  - Dependent steps (has {{step_N}}):     1 LLM call to resolve args, then call tool.
 """
 
 from __future__ import annotations
@@ -21,7 +26,6 @@ _log = logging.getLogger(__name__)
 
 _MCP_ROOT = Path(__file__).parent.parent
 
-# Default server script paths — extend this dict as new MCP servers are added.
 DEFAULT_SERVER_PATHS: dict[str, Path] = {
     "IoTAgent": _MCP_ROOT / "servers" / "iot" / "main.py",
     "Utilities": _MCP_ROOT / "servers" / "utilities" / "main.py",
@@ -29,14 +33,26 @@ DEFAULT_SERVER_PATHS: dict[str, Path] = {
 
 _PLACEHOLDER_RE = re.compile(r"\{\{step_(\d+)\}\}")
 
+_ARG_RESOLUTION_PROMPT = """\
+You are resolving tool argument values for one step in a multi-step plan.
+
+Task: {task}
+Tool to call: {tool}
+
+Results from prior steps:
+{context}
+
+The following arguments need their values resolved from the context above:
+{unresolved}
+
+Respond with a JSON object containing ONLY the resolved argument values.
+Example: {{"site_name": "MAIN", "asset_id": "CH-1"}}
+
+Response:"""
+
 
 class Executor:
-    """Executes plan steps by routing tool calls to MCP servers.
-
-    The tool name and arguments are taken directly from the PlanStep (decided
-    by the Planner).  {{step_N}} placeholders in argument values are resolved
-    from prior step results before the tool is called.
-    """
+    """Executes plan steps by routing tool calls to MCP servers."""
 
     def __init__(
         self,
@@ -47,12 +63,7 @@ class Executor:
         self._server_paths = DEFAULT_SERVER_PATHS if server_paths is None else server_paths
 
     async def get_agent_descriptions(self) -> dict[str, str]:
-        """Query each registered MCP server and return a formatted tool signature.
-
-        Returns:
-            Mapping of server_name -> multi-line string listing tool signatures
-            with parameter names and types, suitable for passing to the Planner.
-        """
+        """Query each registered MCP server and return formatted tool signatures."""
         descriptions: dict[str, str] = {}
         for name, path in self._server_paths.items():
             try:
@@ -98,9 +109,10 @@ class Executor:
         """Execute a single plan step.
 
         1. Resolve the MCP server assigned to this step.
-        2. If the step has no tool (tool is "none"/empty), return expected_output.
-        3. Resolve {{step_N}} placeholders in tool_args from prior results.
-        4. Call the tool via MCP stdio and return the result.
+        2. If no tool is specified, return expected_output directly.
+        3. If tool_args contain {{step_N}} placeholders, call the LLM to resolve
+           them from prior step results.
+        4. Call the tool and return its result.
         """
         server_path = self._server_paths.get(step.agent)
         if server_path is None:
@@ -115,7 +127,6 @@ class Executor:
                 ),
             )
 
-        # No tool — answer comes directly from the plan
         if not step.tool or step.tool.lower() in ("none", "null"):
             return StepResult(
                 step_number=step.step_number,
@@ -125,7 +136,17 @@ class Executor:
             )
 
         try:
-            resolved_args = _resolve_args(step.tool_args, context)
+            if _has_placeholders(step.tool_args):
+                _log.info(
+                    "Step %d has unresolved args — calling LLM to resolve.",
+                    step.step_number,
+                )
+                resolved_args = await _resolve_args_with_llm(
+                    step.task, step.tool, step.tool_args, context, self._llm
+                )
+            else:
+                resolved_args = step.tool_args
+
             response = await _call_tool(server_path, step.tool, resolved_args)
             return StepResult(
                 step_number=step.step_number,
@@ -141,6 +162,93 @@ class Executor:
                 response="",
                 error=str(exc),
             )
+
+
+# ── arg resolution ────────────────────────────────────────────────────────────
+
+
+def _has_placeholders(args: dict) -> bool:
+    """Return True if any string arg value contains a {{step_N}} placeholder."""
+    return any(
+        isinstance(v, str) and _PLACEHOLDER_RE.search(v)
+        for v in args.values()
+    )
+
+
+async def _resolve_args_with_llm(
+    task: str,
+    tool: str,
+    args: dict,
+    context: dict[int, StepResult],
+    llm: LLMBackend,
+) -> dict:
+    """Use the LLM to resolve {{step_N}} placeholders from prior step results.
+
+    Args that have no placeholders are passed through unchanged.
+    Args with placeholders are resolved by an LLM call using the referenced
+    step results as context.
+
+    Returns the fully resolved args dict.
+    """
+    known: dict = {}
+    unresolved: dict = {}
+    for key, val in args.items():
+        if isinstance(val, str) and _PLACEHOLDER_RE.search(val):
+            unresolved[key] = val
+        else:
+            known[key] = val
+
+    # Collect the step results referenced by any placeholder
+    referenced = {
+        int(m.group(1))
+        for val in unresolved.values()
+        for m in _PLACEHOLDER_RE.finditer(val)
+    }
+    context_text = "\n".join(
+        f"Step {n}: {context[n].response}"
+        for n in sorted(referenced)
+        if n in context
+    )
+    unresolved_text = "\n".join(
+        f"  {k} (placeholder: {v})" for k, v in unresolved.items()
+    )
+
+    prompt = _ARG_RESOLUTION_PROMPT.format(
+        task=task,
+        tool=tool,
+        context=context_text or "(none)",
+        unresolved=unresolved_text,
+    )
+    raw = llm.generate(prompt)
+
+    # Parse the LLM response as JSON
+    resolved_values = _parse_json(raw)
+
+    return {**known, **resolved_values}
+
+
+def _parse_json(raw: str) -> dict:
+    """Extract a JSON object from an LLM response, with markdown fence handling."""
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+        text = "\n".join(inner).lstrip("json").strip()
+    try:
+        result = json.loads(text)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+    start, end = text.find("{"), text.rfind("}") + 1
+    if start != -1 and end > start:
+        try:
+            result = json.loads(text[start:end])
+            if isinstance(result, dict):
+                return result
+        except json.JSONDecodeError:
+            pass
+    return {}
 
 
 # ── MCP protocol helpers ──────────────────────────────────────────────────────
@@ -196,7 +304,7 @@ def _extract_content(content: list[Any]) -> str:
 
 
 def _resolve_args(args: dict, context: dict[int, StepResult]) -> dict:
-    """Replace {{step_N}} placeholders in arg values with prior step responses."""
+    """Simple string substitution of {{step_N}} placeholders (kept for tests)."""
     resolved = {}
     for key, val in args.items():
         if isinstance(val, str):
@@ -210,12 +318,8 @@ def _resolve_args(args: dict, context: dict[int, StepResult]) -> dict:
 
 
 def _parse_tool_call(raw: str) -> dict:
-    """Parse LLM output into a {tool, args} dict.
-
-    Kept as a utility; no longer used in the main execution path.
-    """
+    """Parse LLM output into a {tool, args} dict (utility, not used in main path)."""
     text = raw.strip()
-    # Strip markdown code fences
     if text.startswith("```"):
         lines = text.splitlines()
         inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
