@@ -118,8 +118,12 @@ Explore all scenarios [HF-Dataset](https://huggingface.co/datasets/ibm-research/
 - **WO Agent**: `generate_work_order`  
 
 ### Multi-Agent Frameworks (Blue Prints)
-- **[MetaAgent](https://github.com/IBM/AssetOpsBench/tree/main/src/meta_agent)**: reAct-based single-agent-as-tool orchestration  
-- **[AgentHive](https://github.com/IBM/AssetOpsBench/tree/main/src/agent_hive)**: plan-and-execute sequential workflow  
+- **[MetaAgent](https://github.com/IBM/AssetOpsBench/tree/main/src/meta_agent)**: reAct-based single-agent-as-tool orchestration
+- **[AgentHive](https://github.com/IBM/AssetOpsBench/tree/main/src/agent_hive)**: plan-and-execute sequential workflow
+
+### MCP Environment
+The `mcp/` directory contains MCP servers and a plan-execute runner built on the [Model Context Protocol](https://modelcontextprotocol.io/).
+See **[INSTRUCTIONS.md](./INSTRUCTIONS.md)** for setup, usage, and testing.
 
 ---
 

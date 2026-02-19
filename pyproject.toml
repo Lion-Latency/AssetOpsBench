@@ -1,8 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp/plan_execute", "mcp/llm"]
+
 [project]
 name = "assetopsbench-mcp"
 version = "0.1.0"
 description = "Add your description here"
-readme = "README.md"
+readme = "INSTRUCTIONS.md"
 requires-python = ">=3.14"
 dependencies = [
     "couchdb3>=2.0.2",
@@ -14,6 +21,10 @@ dependencies = [
     "uvicorn>=0.41.0",
 ]
 
+[project.scripts]
+plan-execute = "plan_execute.cli:main"
+
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
@@ -21,6 +32,9 @@ dev = [
     "pytest-anyio>=0.0.0",
 ]
 
+[tool.uv]
+package = true
+
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["mcp"]
 

@@ -9,8 +9,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging — default WARNING so stderr stays quiet when used as MCP server;
+# set LOG_LEVEL=INFO (or DEBUG) in the environment to see verbose output.
+_log_level = getattr(logging, os.environ.get("LOG_LEVEL", "WARNING").upper(), logging.WARNING)
+logging.basicConfig(level=_log_level)
 logger = logging.getLogger("iot-mcp-server")
 
 # Configuration from environment
