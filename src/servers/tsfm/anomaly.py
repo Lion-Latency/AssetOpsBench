@@ -323,7 +323,6 @@ def _get_tsfm_dataloaders(
         **column_specifiers,
         context_length=context_length,
         prediction_length=forecast_horizon,
-        id_columns=id_columns,
     )
     return dataset_inference
 
