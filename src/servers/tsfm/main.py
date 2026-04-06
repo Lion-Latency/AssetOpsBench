@@ -70,6 +70,26 @@ _log_level = getattr(
 logging.basicConfig(level=_log_level)
 logger = logging.getLogger("tsfm-mcp-server")
 
+from .profiling import RequestMetrics, stage_timer
+
+
+def _emit_metrics(metrics: RequestMetrics) -> None:
+    """Log the finalized metrics report.
+
+    Writes JSON to the profiling logger.  The external harness can also
+    retrieve reports by reading the structured log or by extending this
+    function to write to a file / send to W&B.
+    """
+    import json as _json
+
+    report = metrics.finalize()
+    logger.info("PROFILING_REPORT %s", _json.dumps(report))
+    # Store on the module so the external harness can retrieve the last report
+    _emit_metrics._last_report = report
+
+
+_emit_metrics._last_report = None
+
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -178,6 +198,11 @@ def run_tsfm_forecasting(
     except ImportError as exc:
         return ErrorResult(error=f"tsfm dependencies unavailable: {exc}")
 
+    metrics = RequestMetrics(
+        tool="run_tsfm_forecasting",
+        metadata={"dataset_path": dataset_path, "model_checkpoint": model_checkpoint},
+    )
+
     model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
     dataset_path = _get_dataset_path(dataset_path)
     dataset_config = _build_dataset_config(
@@ -190,15 +215,19 @@ def run_tsfm_forecasting(
     )
 
     try:
-        data_df = _read_ts_data(dataset_path, dataset_config_dictionary=dataset_config)
-        with open(model_checkpoint + "/config.json") as _f:
-            model_config = json.load(_f)
+        # ── Stage: data_retrieval ─────────────────────────────────────────
+        with stage_timer("data_retrieval", metrics):
+            data_df = _read_ts_data(dataset_path, dataset_config_dictionary=dataset_config)
+            with open(model_checkpoint + "/config.json") as _f:
+                model_config = json.load(_f)
 
-        output_data_quality = _tsfm_data_quality_filter(
-            data_df, dataset_config, model_config, task="inference"
-        )
-        data_df = output_data_quality["data"]
-        dataset_config = output_data_quality["dataset_config_dictionary"]
+        # ── Stage: data_quality_filter ────────────────────────────────────
+        with stage_timer("data_quality_filter", metrics):
+            output_data_quality = _tsfm_data_quality_filter(
+                data_df, dataset_config, model_config, task="inference"
+            )
+            data_df = output_data_quality["data"]
+            dataset_config = output_data_quality["dataset_config_dictionary"]
 
         inference_result_dict_data: dict = {
             "target_prediction": [],
@@ -207,12 +236,14 @@ def run_tsfm_forecasting(
         }
 
         if len(data_df) > 0:
+            # Stages: preprocessing, model_loading, inference are inside
             output = _get_ttm_hf_inference(
                 data_df,
                 dataset_config,
                 model_config,
                 model_checkpoint,
                 forecast_horizon=forecast_horizon,
+                metrics=metrics,
             )
             inference_result_dict_data["target_prediction"] = output[
                 "target_prediction"
@@ -240,13 +271,17 @@ def run_tsfm_forecasting(
                     inference_result_dict_data["timestamp"]
                 )[:, :forecast_horizon].tolist()
 
-        results_file = _write_json_to_temp(
-            json.dumps(inference_result_dict_data, indent=4)
-        )
+        # ── Stage: serialization ──────────────────────────────────────────
+        with stage_timer("serialization", metrics):
+            results_file = _write_json_to_temp(
+                json.dumps(inference_result_dict_data, indent=4)
+            )
 
     except Exception as exc:
         logger.error("run_tsfm_forecasting failed: %s", exc)
         return ErrorResult(error=str(exc))
+
+    _emit_metrics(metrics)
 
     dataquality_summary = (
         output_data_quality["dataquality_summary"]
@@ -312,6 +347,11 @@ def run_tsfm_finetuning(
     except ImportError as exc:
         return ErrorResult(error=f"tsfm dependencies unavailable: {exc}")
 
+    metrics = RequestMetrics(
+        tool="run_tsfm_finetuning",
+        metadata={"dataset_path": dataset_path, "model_checkpoint": model_checkpoint},
+    )
+
     model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
     dataset_path = _get_dataset_path(dataset_path)
     abs_save_dir = _get_outputs_path(save_model_dir)
@@ -325,17 +365,21 @@ def run_tsfm_finetuning(
     )
 
     try:
-        data_df = _read_ts_data(dataset_path, dataset_config_dictionary=dataset_config)
-        with open(model_checkpoint + "/config.json") as _f:
-            model_config = json.load(_f)
+        # ── Stage: data_retrieval ─────────────────────────────────────────
+        with stage_timer("data_retrieval", metrics):
+            data_df = _read_ts_data(dataset_path, dataset_config_dictionary=dataset_config)
+            with open(model_checkpoint + "/config.json") as _f:
+                model_config = json.load(_f)
 
         os.makedirs(abs_save_dir, exist_ok=True)
 
-        output_data_quality = _tsfm_data_quality_filter(
-            data_df, dataset_config, model_config, task="finetuning"
-        )
-        data_df = output_data_quality["data"]
-        dataset_config = output_data_quality["dataset_config_dictionary"]
+        # ── Stage: data_quality_filter ────────────────────────────────────
+        with stage_timer("data_quality_filter", metrics):
+            output_data_quality = _tsfm_data_quality_filter(
+                data_df, dataset_config, model_config, task="finetuning"
+            )
+            data_df = output_data_quality["data"]
+            dataset_config = output_data_quality["dataset_config_dictionary"]
 
         if len(data_df) == 0:
             return ErrorResult(
@@ -343,6 +387,7 @@ def run_tsfm_finetuning(
                 "context length requirement. Check Data Quality Summary."
             )
 
+        # Stages: preprocessing, model_loading, training, evaluation are inside
         output = _finetune_ttm_hf(
             data_df,
             dataset_config,
@@ -352,30 +397,35 @@ def run_tsfm_finetuning(
             n_calibration,
             n_test,
             model_checkpoint=model_checkpoint,
+            metrics=metrics,
         )
 
-        result_dict = output.copy()
-        result_dict["performance"] = result_dict["performance"].to_dict()
+        # ── Stage: serialization ──────────────────────────────────────────
+        with stage_timer("serialization", metrics):
+            result_dict = output.copy()
+            result_dict["performance"] = result_dict["performance"].to_dict()
 
-        if "performance" in result_dict:
-            df_perf = pd.DataFrame(result_dict["performance"])
-            df_perf["forecast"] = df_perf["forecast"].values + 1
-            max_forecast = df_perf["forecast"].max()
-            if 0 < forecast_horizon <= max_forecast:
-                result_dict["performance"] = df_perf.loc[
-                    df_perf["forecast"] == forecast_horizon
-                ].to_dict()
+            if "performance" in result_dict:
+                df_perf = pd.DataFrame(result_dict["performance"])
+                df_perf["forecast"] = df_perf["forecast"].values + 1
+                max_forecast = df_perf["forecast"].max()
+                if 0 < forecast_horizon <= max_forecast:
+                    result_dict["performance"] = df_perf.loc[
+                        df_perf["forecast"] == forecast_horizon
+                    ].to_dict()
 
-        if include_dataquality_summary:
-            result_dict["dataquality_summary"] = output_data_quality[
-                "dataquality_summary"
-            ]
+            if include_dataquality_summary:
+                result_dict["dataquality_summary"] = output_data_quality[
+                    "dataquality_summary"
+                ]
 
-        results_file = _write_json_to_temp(json.dumps(result_dict, indent=4))
+            results_file = _write_json_to_temp(json.dumps(result_dict, indent=4))
 
     except Exception as exc:
         logger.error("run_tsfm_finetuning failed: %s", exc)
         return ErrorResult(error=str(exc))
+
+    _emit_metrics(metrics)
 
     try:
         fewshot_dir = abs_save_dir + "/fewshot/"
@@ -452,6 +502,11 @@ def run_tsad(
     except ImportError as exc:
         return ErrorResult(error=f"tsfm dependencies unavailable: {exc}")
 
+    metrics = RequestMetrics(
+        tool="run_tsad",
+        metadata={"dataset_path": dataset_path, "tsfm_output_json": tsfm_output_json},
+    )
+
     dataset_config = _build_dataset_config(
         timestamp_column,
         target_columns,
@@ -462,35 +517,43 @@ def run_tsad(
     )
 
     try:
-        with open(tsfm_output_json, "r") as fh:
-            tsmodel_pred = json.load(fh)
+        # ── Stage: data_retrieval ─────────────────────────────────────────
+        with stage_timer("data_retrieval", metrics):
+            with open(tsfm_output_json, "r") as fh:
+                tsmodel_pred = json.load(fh)
 
-        output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
-            dataset_path,
-            dataset_config,
-            tsmodel_pred,
-            ad_model_checkpoint=ad_model_checkpoint,
-            ad_model_save=ad_model_save,
-            task=task,
-            ad_model_type=ad_model_type,
-            n_calibration=n_calibration,
-            false_alarm=false_alarm,
-        )
+        # ── Stage: anomaly_detection ──────────────────────────────────────
+        with stage_timer("anomaly_detection", metrics):
+            output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
+                dataset_path,
+                dataset_config,
+                tsmodel_pred,
+                ad_model_checkpoint=ad_model_checkpoint,
+                ad_model_save=ad_model_save,
+                task=task,
+                ad_model_type=ad_model_type,
+                n_calibration=n_calibration,
+                false_alarm=false_alarm,
+            )
     except Exception as exc:
         logger.error("run_tsad failed: %s", exc)
         return ErrorResult(error=str(exc))
 
     try:
-        df = _tsad_output_to_df(output)
-        tmp_dir = tempfile.mkdtemp()
-        csv_path = os.path.join(tmp_dir, f"tsad_output_{uuid.uuid4()}.csv")
-        df.to_csv(csv_path, index=False)
-        anomaly_count = (
-            int(df["anomaly_label"].sum()) if "anomaly_label" in df.columns else 0
-        )
+        # ── Stage: serialization ──────────────────────────────────────────
+        with stage_timer("serialization", metrics):
+            df = _tsad_output_to_df(output)
+            tmp_dir = tempfile.mkdtemp()
+            csv_path = os.path.join(tmp_dir, f"tsad_output_{uuid.uuid4()}.csv")
+            df.to_csv(csv_path, index=False)
+            anomaly_count = (
+                int(df["anomaly_label"].sum()) if "anomaly_label" in df.columns else 0
+            )
     except Exception as exc:
         logger.error("run_tsad result serialisation failed: %s", exc)
         return ErrorResult(error=f"Failed to serialise TSAD output: {exc}")
+
+    _emit_metrics(metrics)
 
     return TSADResult(
         status="success",
@@ -551,6 +614,15 @@ def run_integrated_tsad(
     except ImportError as exc:
         return ErrorResult(error=f"tsfm dependencies unavailable: {exc}")
 
+    metrics = RequestMetrics(
+        tool="run_integrated_tsad",
+        metadata={
+            "dataset_path": dataset_path,
+            "model_checkpoint": model_checkpoint,
+            "n_target_columns": len(target_columns),
+        },
+    )
+
     model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
     dataset_path = _get_dataset_path(dataset_path)
 
@@ -562,7 +634,7 @@ def run_integrated_tsad(
             model_config = json.load(_f)
         df_combined = pd.DataFrame()
 
-        for col in target_columns:
+        for col_idx, col in enumerate(target_columns):
             col_config = _build_dataset_config(
                 timestamp_column,
                 [col],
@@ -573,12 +645,15 @@ def run_integrated_tsad(
             )
 
             # 1. Load and quality-filter data for this column
-            data_df = _read_ts_data(dataset_path, dataset_config_dictionary=col_config)
-            output_dq = _tsfm_data_quality_filter(
-                data_df, col_config, model_config, task="inference"
-            )
-            data_df_filtered = output_dq["data"]
-            col_config_filtered = output_dq["dataset_config_dictionary"]
+            with stage_timer(f"data_retrieval_col{col_idx}", metrics):
+                data_df = _read_ts_data(dataset_path, dataset_config_dictionary=col_config)
+
+            with stage_timer(f"data_quality_filter_col{col_idx}", metrics):
+                output_dq = _tsfm_data_quality_filter(
+                    data_df, col_config, model_config, task="inference"
+                )
+                data_df_filtered = output_dq["data"]
+                col_config_filtered = output_dq["dataset_config_dictionary"]
 
             if len(data_df_filtered) == 0:
                 logger.warning(
@@ -587,12 +662,14 @@ def run_integrated_tsad(
                 continue
 
             # 2. Zero-shot forecasting for this column
+            #    Stages: preprocessing, model_loading, inference are inside
             try:
                 forecast_output = _get_ttm_hf_inference(
                     data_df_filtered,
                     col_config_filtered,
                     model_config,
                     model_checkpoint,
+                    metrics=metrics,
                 )
             except Exception as exc:
                 logger.warning("Forecasting failed for column %s: %s", col, exc)
@@ -609,17 +686,18 @@ def run_integrated_tsad(
             tsmodel_pred = inference_data
 
             try:
-                tsad_output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
-                    dataset_path,
-                    col_config,
-                    tsmodel_pred,
-                    ad_model_checkpoint=None,
-                    ad_model_save=ad_model_save,
-                    task="fit",
-                    ad_model_type=ad_model_type,
-                    n_calibration=n_calibration,
-                    false_alarm=false_alarm,
-                )
+                with stage_timer(f"anomaly_detection_col{col_idx}", metrics):
+                    tsad_output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
+                        dataset_path,
+                        col_config,
+                        tsmodel_pred,
+                        ad_model_checkpoint=None,
+                        ad_model_save=ad_model_save,
+                        task="fit",
+                        ad_model_type=ad_model_type,
+                        n_calibration=n_calibration,
+                        false_alarm=false_alarm,
+                    )
             except Exception as exc:
                 logger.warning("TSAD failed for column %s: %s", col, exc)
                 continue
@@ -630,18 +708,22 @@ def run_integrated_tsad(
         if df_combined.empty:
             return ErrorResult(error="No TSAD results produced for any target column.")
 
-        tmp_dir = tempfile.mkdtemp()
-        csv_path = os.path.join(tmp_dir, f"integrated_tsad_{uuid.uuid4()}.csv")
-        df_combined.to_csv(csv_path, index=False)
-        anomaly_count = (
-            int(df_combined["anomaly_label"].sum())
-            if "anomaly_label" in df_combined.columns
-            else 0
-        )
+        # ── Stage: serialization ──────────────────────────────────────────
+        with stage_timer("serialization", metrics):
+            tmp_dir = tempfile.mkdtemp()
+            csv_path = os.path.join(tmp_dir, f"integrated_tsad_{uuid.uuid4()}.csv")
+            df_combined.to_csv(csv_path, index=False)
+            anomaly_count = (
+                int(df_combined["anomaly_label"].sum())
+                if "anomaly_label" in df_combined.columns
+                else 0
+            )
 
     except Exception as exc:
         logger.error("run_integrated_tsad failed: %s", exc)
         return ErrorResult(error=str(exc))
+
+    _emit_metrics(metrics)
 
     return TSADResult(
         status="success",
