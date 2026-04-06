@@ -253,6 +253,11 @@ def _get_ttm_hf_inference(
         column_specifiers["id_columns"] = dataset_config_dictionary["id_columns"]
 
     encode_categorical = False
+    
+    import time
+
+    preprocess_start = time.perf_counter()
+
     tsp = TimeSeriesPreprocessor(
         **column_specifiers,
         scaling=scaling,
@@ -267,19 +272,33 @@ def _get_ttm_hf_inference(
         use_frequency_token=True,
     )
     dataset_inference = dataset_dic[0]
+    preprocess_end = time.perf_counter()
+    print(f"[PROFILE] preprocessing: {preprocess_end - preprocess_start:.4f}s")
 
+    model_load_start = time.perf_counter()
     model = TinyTimeMixerForPrediction.from_pretrained(
         model_checkpoint, prediction_filter_length=forecast_horizon
     )
+    model_load_end = time.perf_counter()
+    print(f"[PROFILE] model_loading: {model_load_end - model_load_start:.4f}s")
+
+    trainer_setup_start = time.perf_counter()
     args = TrainingArguments(output_dir="./output", logging_dir="./log")
     trainer = Trainer(model=model, args=args, eval_dataset=dataset_inference)
+    trainer_setup_end = time.perf_counter()
+    print(f"[PROFILE] trainer_setup: {trainer_setup_end - trainer_setup_start:.4f}s")
 
     ix_target_features = list(
         np.arange(len(dataset_config_dictionary["column_specifiers"]["target_columns"]))
     )
 
+    inference_start = time.perf_counter()
     outputs = trainer.predict(dataset_inference)
     y_pred = outputs.predictions[0][:, :forecast_horizon, ix_target_features]
+    inference_end = time.perf_counter()
+    print(f"[PROFILE] inference: {inference_end - inference_start:.4f}s")
+    
+    postprocess_start = time.perf_counter()
 
     if tsp.scaling:
         for ixf in range(y_pred.shape[1]):
@@ -325,6 +344,12 @@ def _get_ttm_hf_inference(
         y_gt, y_pred_eval, target_columns=target_columns, prediction=False
     )
     output["performance"] = pd_performance
+
+    postprocess_end = time.perf_counter()
+    print(
+        f"[PROFILE] postprocessing_serialization: "
+        f"{postprocess_end - postprocess_start:.4f}s"
+    )
 
     return output
 
