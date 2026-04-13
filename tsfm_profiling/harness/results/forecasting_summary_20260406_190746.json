@@ -1,0 +1,8 @@
+{
+  "total_runs": 5,
+  "successful_runs": 5,
+  "failed_runs": 0,
+  "cold_start_latency_sec": 5.475595677000001,
+  "steady_state_avg_latency_sec": 0.6499038457500319,
+  "steady_state_avg_rss_delta_mb": 0.2841796875
+}
