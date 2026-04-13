@@ -1,0 +1,6 @@
+workflow,run_index,run_type,status,error,latency_sec,cpu_rss_delta_mb,model_checkpoint,forecast_horizon,seed
+tsad,1,cold_start,success,,0.33355339099944104,0.2734375,ttm_96_28,24,42
+tsad,2,steady_state,success,,0.33731556800012186,0.0,ttm_96_28,24,42
+tsad,3,steady_state,success,,0.34091724900099507,0.00390625,ttm_96_28,24,42
+tsad,4,steady_state,success,,0.33656375999999,0.0,ttm_96_28,24,42
+tsad,5,steady_state,success,,0.3333026750005956,0.0,ttm_96_28,24,42
