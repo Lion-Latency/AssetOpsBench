@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 
 
-output_dir = Path("/home/tp2758/tsfm_profiling_data/datasets/synthetic_data")
+#output_dir = Path("/home/tp2758/tsfm_profiling_data/datasets/synthetic_data")
+# Using a path relative to the script instead of hardcoded path
+BASE_DIR = Path(__file__).resolve().parent
+output_dir = BASE_DIR / "synthetic_data"
 output_dir.mkdir(parents=True, exist_ok=True)
 
 number_of_rows = 300
