@@ -1,8 +1,15 @@
 from pathlib import Path
 import sys
+import os
 
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "synthetic_data"
+MODELS_DIR = repo_root / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
+
+os.environ["PATH_TO_MODELS_DIR"] = str(MODELS_DIR) # to resolve the checkpoint path
 
 from src.servers.tsfm.main import (
     run_tsfm_forecasting,
@@ -43,7 +50,7 @@ print("="*60)
 
 # Check 1: Forecasting
 forecast_result = run_tsfm_forecasting(
-    dataset_path="synthetic_data/chiller9_annotated_small_test.csv",
+    dataset_path=str(DATA_DIR / "chiller9_annotated_small_test.csv"),
     timestamp_column="Timestamp",
     target_columns=["Chiller 9 Condenser Water Flow"],
     model_checkpoint="ttm_96_28",
@@ -53,7 +60,7 @@ print_result("CHECK 1: Forecasting", forecast_result)
 
 # Check 2: Fine-Tuning
 finetune_result = run_tsfm_finetuning(
-    dataset_path="synthetic_data/chiller9_finetuning_small.csv",
+    dataset_path=str(DATA_DIR / "chiller9_finetuning_small.csv"),
     timestamp_column="Timestamp",
     target_columns=["Chiller 9 Condenser Water Flow"],
     model_checkpoint="ttm_96_28",
@@ -64,8 +71,8 @@ finetune_result = run_tsfm_finetuning(
 )
 print_result("CHECK 2: Fine-Tuning", finetune_result)
 
-forecast_dataset_path = "/home/tp2758/tsfm_profiling_data/datasets/synthetic_data/chiller9_annotated_small_test.csv"
-tsad_dataset_path = "/home/tp2758/tsfm_profiling_data/datasets/synthetic_data/chiller9_tsad.csv"
+forecast_dataset_path = str(DATA_DIR / "chiller9_annotated_small_test.csv")
+tsad_dataset_path = str(DATA_DIR / "chiller9_tsad.csv")
 
 # Prepare for anomaly detection by running forecasting first
 forecast_result = run_tsfm_forecasting(
