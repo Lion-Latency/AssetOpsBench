@@ -4,16 +4,20 @@ import sys
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
 
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "synthetic_data"
+MODELS_DIR = repo_root / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
+
 from src.servers.tsfm.main import run_integrated_tsad
 
-dataset_path = "/home/tp2758/tsfm_profiling_data/datasets/synthetic_data/chiller9_tsad.csv"
+tsad_dataset_path = str(DATA_DIR / "chiller9_tsad.csv")
 
 print("\n" + "="*60)
 print("INTEGRATED ANOMALY DETECTION CHECK")
 print("="*60)
 
 result = run_integrated_tsad(
-    dataset_path=dataset_path,
+    dataset_path=tsad_dataset_path,
     timestamp_column="Timestamp",
     target_columns=["Chiller 9 Condenser Water Flow"],
     model_checkpoint="ttm_96_28",

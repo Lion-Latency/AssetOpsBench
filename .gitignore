@@ -198,6 +198,9 @@ src/agent_hive/workflows/track1_planning.py
 benchmark/cods_track2/.env.local
 CLAUDE.md
 mcp/couchdb/sample_data/bulk_docs.json
+
+# TSFM profiling synthetic data
+tsfm_profiling/functionality_verification/synthetic_data/
 .env
 mcp/servers/tsfm/artifacts/tsfm_models/
 src/tmp/
