@@ -4,10 +4,14 @@ import sys
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
 
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "synthetic_data"
+MODELS_DIR = repo_root / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
+
 from src.servers.tsfm.main import run_tsfm_forecasting, run_tsad
 
-forecast_dataset_path = "/home/tp2758/tsfm_profiling_data/datasets/synthetic_data/chiller9_annotated_small_test.csv"
-tsad_dataset_path = "/home/tp2758/tsfm_profiling_data/datasets/synthetic_data/chiller9_tsad.csv"
+forecast_dataset_path = str(DATA_DIR / "chiller9_annotated_small_test.csv")
+tsad_dataset_path = str(DATA_DIR / "chiller9_tsad.csv")
 
 print("\n" + "="*60)
 print("ANOMALY DETECTION CHECK")

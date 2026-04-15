@@ -4,6 +4,10 @@ import sys
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
 
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "synthetic_data"
+MODELS_DIR = repo_root / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
+
 from src.servers.tsfm.main import run_tsfm_finetuning
 
 print("\n" + "="*60)
@@ -11,7 +15,7 @@ print("FINE-TUNING CHECK")
 print("="*60)
 
 result = run_tsfm_finetuning(
-    dataset_path="synthetic_data/chiller9_finetuning_small.csv",
+    dataset_path=str(DATA_DIR / "chiller9_finetuning_small.csv"),
     timestamp_column="Timestamp",
     target_columns=["Chiller 9 Condenser Water Flow"],
     model_checkpoint="ttm_96_28",
