@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 BASE_DIR = REPO_ROOT / "tsfm_profiling" / "functionality_verification"
-DATA_DIR = BASE_DIR / "synthetic_data"
+DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
 OUTPUT_DIR = REPO_ROOT / "tsfm_profiling" / "harness" / "results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -132,7 +132,7 @@ def bench_forecasting(config):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsfm_forecasting,
-            dataset_path=str(DATA_DIR / "chiller9_annotated_small_test.csv"),
+            dataset_path=str(DATA_DIR / "main.json"),
             timestamp_column="Timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
             model_checkpoint=config["model_checkpoint"],
@@ -147,7 +147,7 @@ def bench_finetuning(config):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsfm_finetuning,
-            dataset_path=str(DATA_DIR / "chiller9_finetuning_small.csv"),
+            dataset_path=str(DATA_DIR / "main.json"),
             timestamp_column="Timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
             model_checkpoint=config["model_checkpoint"],
@@ -163,7 +163,7 @@ def bench_finetuning(config):
 def bench_tsad(config):
     forecast_result, _, _ = timed_run(
         run_tsfm_forecasting,
-        dataset_path=str(DATA_DIR / "chiller9_annotated_small_test.csv"),
+        dataset_path=str(DATA_DIR / "main.json"),
         timestamp_column="Timestamp",
         target_columns=["Chiller 9 Condenser Water Flow"],
         model_checkpoint=config["model_checkpoint"],
@@ -177,7 +177,7 @@ def bench_tsad(config):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsad,
-            dataset_path=str(DATA_DIR / "chiller9_tsad.csv"),
+            dataset_path=str(DATA_DIR / "main.json"),
             tsfm_output_json=forecast_file,
             timestamp_column="Timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
@@ -194,7 +194,7 @@ def bench_integrated_tsad(config):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_integrated_tsad,
-            dataset_path=str(DATA_DIR / "chiller9_tsad.csv"),
+            dataset_path=str(DATA_DIR / "main.json"),
             timestamp_column="Timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
             model_checkpoint=config["model_checkpoint"],
