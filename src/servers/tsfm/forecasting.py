@@ -15,6 +15,8 @@ import yaml
 import numpy as np
 import pandas as pd
 
+from . import cache as _cache
+from . import parallel as _parallel
 from .dataquality import (
     _df_dt_stats,
     _df_nan_stats,
@@ -263,20 +265,34 @@ def _get_ttm_hf_inference(
     # ── Stage: preprocessing ──────────────────────────────────────────────
     with stage_timer("preprocessing", metrics):
         encode_categorical = False
-        tsp = TimeSeriesPreprocessor(
-            **column_specifiers,
-            scaling=scaling,
-            encode_categorical=encode_categorical,
-            prediction_length=forecast_horizon,
-            context_length=context_length,
+
+        prep_key = _cache.make_key(
+            _parallel.mode_tag(), "prep_inference",
+            _cache.df_fingerprint(df_dataframe),
+            column_specifiers, scaling, encode_categorical,
+            forecast_horizon, context_length,
         )
-        dataset_dic = get_datasets(
-            tsp,
-            df_dataframe,
-            split_config={"train": 1.0, "test": 0.0},
-            use_frequency_token=True,
-        )
-        dataset_inference = dataset_dic[0]
+        cached_prep = _cache.get(prep_key)
+        if cached_prep is not None:
+            tsp, dataset_inference = cached_prep
+            metrics.metadata["prep_cache_hit"] = True
+        else:
+            metrics.metadata["prep_cache_hit"] = False
+            tsp = TimeSeriesPreprocessor(
+                **column_specifiers,
+                scaling=scaling,
+                encode_categorical=encode_categorical,
+                prediction_length=forecast_horizon,
+                context_length=context_length,
+            )
+            dataset_dic = get_datasets(
+                tsp,
+                df_dataframe,
+                split_config={"train": 1.0, "test": 0.0},
+                use_frequency_token=True,
+            )
+            dataset_inference = dataset_dic[0]
+            _cache.put(prep_key, (tsp, dataset_inference))
 
     # ── Stage: model_loading ──────────────────────────────────────────────
     with stage_timer("model_loading", metrics):
