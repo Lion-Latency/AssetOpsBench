@@ -25,6 +25,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 os.environ["PATH_TO_MODELS_DIR"] = str(MODELS_DIR)
 
+from src.servers.tsfm import cache as _cache
 from src.servers.tsfm.main import (
     _emit_metrics,
     run_integrated_tsad,
@@ -35,6 +36,25 @@ from src.servers.tsfm.main import (
 
 WANDB_ENTITY = "lion-latency"
 WANDB_PROJECT = "hpml-project"
+
+MODES = {
+    "baseline":   {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "0"},
+    "cache_only": {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "0"},
+    "combined":   {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "1",
+                   "TSFM_PREPROCESS_WORKERS": "4",
+                   "TSFM_PREPROCESS_EXECUTOR": "thread"},
+}
+
+
+def apply_mode(mode: str) -> None:
+    """Set env vars for `mode` and clear the in-memory cache so run 1
+    is a guaranteed cold-start under the new configuration."""
+    for k in ("TSFM_CACHE_ENABLED", "TSFM_PREPROCESS_OPT",
+              "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR"):
+        os.environ.pop(k, None)
+    for k, v in MODES[mode].items():
+        os.environ[k] = v
+    _cache.clear()
 
 
 def set_seed(seed):
@@ -81,12 +101,14 @@ def timed_run(fn, **kwargs):
     return result, latency, rss_delta
 
 
-def make_row(workflow, run_index, result, latency, rss_delta, config):
+def make_row(workflow, run_index, result, latency, rss_delta, config, mode):
     report = _emit_metrics._last_report or {}
     stages = report.get("stages", [])
+    meta = report.get("metadata", {})
 
     row = {
         "workflow": workflow,
+        "mode": mode,
         "run_index": run_index,
         "run_type": "cold_start" if run_index == 1 else "steady_state",
         "status": getattr(result, "status", "unknown"),
@@ -96,6 +118,8 @@ def make_row(workflow, run_index, result, latency, rss_delta, config):
         "end_to_end_ms": report.get("end_to_end_ms"),
         "stage_total_ms": report.get("stage_total_ms"),
         "overhead_ms": report.get("overhead_ms"),
+        "dq_cache_hit": meta.get("dq_cache_hit"),
+        "prep_cache_hit": meta.get("prep_cache_hit"),
         "model_checkpoint": config.get("model_checkpoint"),
         "forecast_horizon": config.get("forecast_horizon"),
         "seed": config.get("seed"),
@@ -127,7 +151,7 @@ def summarize(rows):
     }
 
 
-def bench_forecasting(config):
+def bench_forecasting(config, mode):
     rows = []
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
@@ -138,11 +162,11 @@ def bench_forecasting(config):
             model_checkpoint=config["model_checkpoint"],
             forecast_horizon=config["forecast_horizon"],
         )
-        rows.append(make_row("forecasting", i, result, latency, rss, config))
+        rows.append(make_row("forecasting", i, result, latency, rss, config, mode))
     return rows
 
 
-def bench_finetuning(config):
+def bench_finetuning(config, mode):
     rows = []
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
@@ -156,11 +180,11 @@ def bench_finetuning(config):
             n_finetune=0.05,
             n_test=0.05,
         )
-        rows.append(make_row("finetuning", i, result, latency, rss, config))
+        rows.append(make_row("finetuning", i, result, latency, rss, config, mode))
     return rows
 
 
-def bench_tsad(config):
+def bench_tsad(config, mode):
     forecast_result, _, _ = timed_run(
         run_tsfm_forecasting,
         dataset_path=str(DATA_DIR / "main.json"),
@@ -185,11 +209,11 @@ def bench_tsad(config):
             false_alarm=0.05,
             n_calibration=0.2,
         )
-        rows.append(make_row("tsad", i, result, latency, rss, config))
+        rows.append(make_row("tsad", i, result, latency, rss, config, mode))
     return rows
 
 
-def bench_integrated_tsad(config):
+def bench_integrated_tsad(config, mode):
     rows = []
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
@@ -201,17 +225,23 @@ def bench_integrated_tsad(config):
             false_alarm=0.05,
             n_calibration=0.2,
         )
-        rows.append(make_row("integrated_tsad", i, result, latency, rss, config))
+        rows.append(make_row("integrated_tsad", i, result, latency, rss, config, mode))
     return rows
 
 
-def log_to_wandb(workflow, rows, summary):
+def log_to_wandb(workflow, rows, summary, mode):
     run = wandb.init(
         entity=WANDB_ENTITY,
         project=WANDB_PROJECT,
-        name=f"bench_{workflow}_{time.strftime('%Y%m%d_%H%M%S')}",
+        name=f"bench_{workflow}_{mode}_{time.strftime('%Y%m%d_%H%M%S')}",
+        group=mode,
+        tags=[mode, workflow],
         config={
             "workflow": workflow,
+            "mode": mode,
+            "cache_enabled": os.environ.get("TSFM_CACHE_ENABLED"),
+            "preprocess_opt": os.environ.get("TSFM_PREPROCESS_OPT"),
+            "preprocess_workers": os.environ.get("TSFM_PREPROCESS_WORKERS"),
             "model_checkpoint": rows[0]["model_checkpoint"] if rows else None,
             "repeats": len(rows),
         },
@@ -273,7 +303,9 @@ def main():
         "repeats": 5,
     }
 
-    set_seed(config["seed"])
+    modes = os.environ.get("TSFM_BENCH_MODES", "baseline,cache_only,combined").split(",")
+    modes = [m.strip() for m in modes if m.strip() in MODES]
+
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     all_rows = []
 
@@ -282,41 +314,50 @@ def main():
     print("=" * 72)
     print(f"Entity: {WANDB_ENTITY} | Project: {WANDB_PROJECT}")
     print(f"Repeats per workflow: {config['repeats']}")
+    print(f"Modes: {modes}")
     print()
 
-    for workflow, bench_fn in BENCHMARKS.items():
-        print(f"--- {workflow.upper()} ---")
-        try:
-            rows = bench_fn(config)
-        except Exception as e:
-            print(f"  SKIPPED ({e})")
-            continue
+    for mode in modes:
+        apply_mode(mode)
+        set_seed(config["seed"])
+        print("#" * 72)
+        print(f"# MODE: {mode}  (env={MODES[mode]})")
+        print("#" * 72)
 
-        for r in rows:
-            print(
-                f"  Run {r['run_index']} [{r['run_type']}] "
-                f"status={r['status']} "
-                f"latency={r['latency_sec']:.4f}s "
-                f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
-                f"overhead={r.get('overhead_ms', 'N/A')}ms"
-            )
-            if r["status"] != "success":
-                print(f"    error: {r['error']}")
+        for workflow, bench_fn in BENCHMARKS.items():
+            print(f"--- {workflow.upper()} [{mode}] ---")
+            try:
+                rows = bench_fn(config, mode)
+            except Exception as e:
+                print(f"  SKIPPED ({e})")
+                continue
 
-        summary = summarize(rows)
-        print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
-        print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
-        print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
-        print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
+            for r in rows:
+                print(
+                    f"  Run {r['run_index']} [{r['run_type']}] "
+                    f"status={r['status']} "
+                    f"latency={r['latency_sec']:.4f}s "
+                    f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
+                    f"overhead={r.get('overhead_ms', 'N/A')}ms "
+                    f"dq_hit={r.get('dq_cache_hit')} prep_hit={r.get('prep_cache_hit')}"
+                )
+                if r["status"] != "success":
+                    print(f"    error: {r['error']}")
 
-        log_to_wandb(workflow, rows, summary)
+            summary = summarize(rows)
+            print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
+            print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
+            print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
+            print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
 
-        write_json(OUTPUT_DIR / f"{workflow}_{timestamp}.json", rows)
-        write_csv(OUTPUT_DIR / f"{workflow}_{timestamp}.csv", rows)
-        write_json(OUTPUT_DIR / f"{workflow}_summary_{timestamp}.json", summary)
+            log_to_wandb(workflow, rows, summary, mode)
 
-        all_rows.extend(rows)
-        print()
+            write_json(OUTPUT_DIR / f"{workflow}_{mode}_{timestamp}.json", rows)
+            write_csv(OUTPUT_DIR / f"{workflow}_{mode}_{timestamp}.csv", rows)
+            write_json(OUTPUT_DIR / f"{workflow}_summary_{mode}_{timestamp}.json", summary)
+
+            all_rows.extend(rows)
+            print()
 
     write_json(OUTPUT_DIR / f"all_benchmarks_{timestamp}.json", all_rows)
     write_csv(OUTPUT_DIR / f"all_benchmarks_{timestamp}.csv", all_rows)
