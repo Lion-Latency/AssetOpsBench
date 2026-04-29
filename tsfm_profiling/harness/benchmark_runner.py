@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+from dotenv import load_dotenv                                                                                                               
 import random
 import sys
 import time
@@ -14,11 +15,12 @@ import numpy as np
 import psutil
 import wandb
 
+load_dotenv()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 BASE_DIR = REPO_ROOT / "tsfm_profiling" / "functionality_verification"
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("PATH_TO_DATASETS_DIR")) / "dhaval_data"
 MODELS_DIR = REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
 OUTPUT_DIR = REPO_ROOT / "tsfm_profiling" / "harness" / "results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -156,8 +158,8 @@ def bench_forecasting(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsfm_forecasting,
-            dataset_path=str(DATA_DIR / "main.json"),
-            timestamp_column="Timestamp",
+            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
+            timestamp_column="timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
             model_checkpoint=config["model_checkpoint"],
             forecast_horizon=config["forecast_horizon"],
@@ -171,8 +173,8 @@ def bench_finetuning(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsfm_finetuning,
-            dataset_path=str(DATA_DIR / "main.json"),
-            timestamp_column="Timestamp",
+            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
+            timestamp_column="timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
             model_checkpoint=config["model_checkpoint"],
             save_model_dir="tunedmodels",
@@ -187,8 +189,8 @@ def bench_finetuning(config, mode):
 def bench_tsad(config, mode):
     forecast_result, _, _ = timed_run(
         run_tsfm_forecasting,
-        dataset_path=str(DATA_DIR / "main.json"),
-        timestamp_column="Timestamp",
+        dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
+        timestamp_column="timestamp",
         target_columns=["Chiller 9 Condenser Water Flow"],
         model_checkpoint=config["model_checkpoint"],
         forecast_horizon=config["forecast_horizon"],
@@ -201,9 +203,9 @@ def bench_tsad(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsad,
-            dataset_path=str(DATA_DIR / "main.json"),
+            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
             tsfm_output_json=forecast_file,
-            timestamp_column="Timestamp",
+            timestamp_column="timestamp",
             target_columns=["Chiller 9 Condenser Water Flow"],
             task="fit",
             false_alarm=0.05,
@@ -218,9 +220,12 @@ def bench_integrated_tsad(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_integrated_tsad,
-            dataset_path=str(DATA_DIR / "main.json"),
-            timestamp_column="Timestamp",
-            target_columns=["Chiller 9 Condenser Water Flow"],
+            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
+            timestamp_column="timestamp",
+            target_columns= ["Chiller 9 Condenser Water Flow",
+                            "Chiller 9 Power Input",         
+                            "Chiller 9 Tonnage",                                                                                                                   
+                            "Chiller 9 Supply Temperature",],
             model_checkpoint=config["model_checkpoint"],
             false_alarm=0.05,
             n_calibration=0.2,
@@ -325,13 +330,14 @@ def main():
         print("#" * 72)
 
         for workflow, bench_fn in BENCHMARKS.items():
+            
             print(f"--- {workflow.upper()} [{mode}] ---")
             try:
                 rows = bench_fn(config, mode)
             except Exception as e:
                 print(f"  SKIPPED ({e})")
                 continue
-
+            
             for r in rows:
                 print(
                     f"  Run {r['run_index']} [{r['run_type']}] "

@@ -377,7 +377,9 @@ def _get_tsad_aligned_data(
     )
 
     df_data[dataset_config["column_specifiers"]["timestamp_column"]] = pd.to_datetime(
-        df_data[dataset_config["column_specifiers"]["timestamp_column"]]
+        df_data[dataset_config["column_specifiers"]["timestamp_column"]],
+        format='ISO8601',
+        utc = True,
     )
     dataset_inference = _get_tsfm_dataloaders(
         df_data,

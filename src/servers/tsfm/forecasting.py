@@ -44,7 +44,7 @@ def _tsfm_data_quality_filter(
         data_col.extend(dataset_config_dictionary["operation_on_column"])
 
     df = df_dataframe[data_col].copy()
-    df[timestamp_col] = pd.to_datetime(df[timestamp_col])
+    df[timestamp_col] = pd.to_datetime(df[timestamp_col], format='ISO8601', utc=True) # UTC set to true to avoid error with mismatched timezones
     for col in data_col:
         if col != timestamp_col:
             df[col] = df[col].astype(float)
@@ -65,7 +65,7 @@ def _tsfm_data_quality_filter(
             frequency_minutes = _freq_token_to_minutes[freq_str]
 
     if frequency_minutes is None:
-        timestamps = pd.to_datetime(df[timestamp_col])
+        timestamps = pd.to_datetime(df[timestamp_col], format='ISO8601', utc=True) # UTC set to true to avoid error with mismatched timezones
         time_diffs = timestamps.diff().dropna()
         frequency_minutes = float(time_diffs.dt.total_seconds().div(60).median())
 
@@ -299,7 +299,7 @@ def _get_ttm_hf_inference(
         model = TinyTimeMixerForPrediction.from_pretrained(
             model_checkpoint, prediction_filter_length=forecast_horizon
         )
-        args = TrainingArguments(output_dir="./output", logging_dir="./log")
+        args = TrainingArguments(output_dir="./output", logging_dir="./log", report_to="none") # report_to var set to avoid wandb login conflict w harness
         trainer = Trainer(model=model, args=args, eval_dataset=dataset_inference)
 
     # ── Stage: inference ──────────────────────────────────────────────────
@@ -367,7 +367,7 @@ _DEFAULT_TRAINING_ARGUMENTS = {
     "learning_rate": 0.0001,
     "num_train_epochs": 10,
     "do_eval": True,
-    "evaluation_strategy": "epoch",
+    "evaluation_strategy": "epoch", 
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
     "save_strategy": "epoch",
@@ -569,6 +569,7 @@ def _finetune_ttm_hf(
             "output_dir": output_fewshot_dir,
             "logging_dir": logging_dir,
             "dataloader_num_workers": num_workers,
+            "report_to": "none", # report_to var set to avoid wandb login conflict w harness
         }
     )
     if epochs_warmup > 0:
