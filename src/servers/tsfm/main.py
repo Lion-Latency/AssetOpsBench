@@ -293,7 +293,8 @@ def run_tsfm_forecasting(
             )
 
     except Exception as exc:
-        logger.error("run_tsfm_forecasting failed: %s", exc)
+        #logger.error("run_tsfm_forecasting failed: %s", exc)
+        logger.exception("run_tsfm_forecasting failed: %s", exc)
         return ErrorResult(error=str(exc))
 
     _emit_metrics(metrics)
