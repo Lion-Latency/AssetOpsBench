@@ -46,7 +46,7 @@ dev = [
 # tsfm_public must be installed separately: pip install git+https://github.com/ibm-granite/granite-tsfm
 tsfm = [
     "torch>=2.0",
-    "transformers>=4.40",
+    "transformers==4.45.2",
 ]
 
 [tool.uv]
