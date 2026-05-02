@@ -154,6 +154,24 @@ class TestRunTSFMFinetuningValidation:
         assert "error" in data
         assert "target_columns" in data["error"]
 
+class TestRunTSFMFinetuningChronosValidation:
+    @pytest.mark.anyio
+    async def test_empty_dataset_path_returns_error(self):
+        data = await call_tool(
+            mcp, "run_tsfm_finetuning_chronos",
+            {"dataset_path": "", "timestamp_column": "ts", "target_columns": ["val"]},
+        )
+        assert "error" in data
+        assert "dataset_path" in data["error"]
+
+    @pytest.mark.anyio
+    async def test_empty_target_columns_returns_error(self):
+        data = await call_tool(
+            mcp, "run_tsfm_finetuning_chronos",
+            {"dataset_path": "/tmp/data.csv", "timestamp_column": "ts", "target_columns": []},
+        )
+        assert "error" in data
+        assert "target_columns" in data["error"]
 
 # ── run_tsad — input validation ───────────────────────────────────────────────
 

@@ -13,6 +13,9 @@ sys.path.insert(0, str(repo_root))
 
 load_dotenv(repo_root / ".env")
 
+# Runs on CPU to avoid out of memory error on GPU.
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 datasets_dir = os.getenv("PATH_TO_DATASETS_DIR")
 if not datasets_dir:
     raise RuntimeError("PATH_TO_DATASETS_DIR is not set")
@@ -24,12 +27,16 @@ TIMESTAMP_COLUMN = "timestamp"
 SUBSET_START_ROW = 789000
 FORECAST_HORIZON = 24
 SUBSET_NROWS = 2000
+NUM_STEPS = 10
 
-from src.servers.tsfm.main import run_tsfm_finetuning, run_tsfm_forecasting
+from src.servers.tsfm.main import (
+    run_tsfm_finetuning_chronos,
+    run_tsfm_forecasting_chronos,
+)
 from src.servers.tsfm.metrics import _MAE, _MAPE, _RMSE
 
 print("\n" + "="*90)
-print("FINE-TUNING CHECK (Original Model with TTM)")
+print("FINE-TUNING CHECK (Interchangeable Model with Chronos)")
 print("="*90)
 
 subset_df = pd.read_csv(
@@ -62,11 +69,11 @@ naive_errors = np.abs(
 )
 mase_denom = float(naive_errors.mean()) if len(naive_errors) > 0 else None
 
-base_forecast_result = run_tsfm_forecasting(
+base_forecast_result = run_tsfm_forecasting_chronos(
     dataset_path=str(forecast_dataset_path),
     timestamp_column=TIMESTAMP_COLUMN,
     target_columns=[TARGET_COLUMN],
-    model_checkpoint="ttm_96_28",
+    model_checkpoint="amazon/chronos-2",
     forecast_horizon=FORECAST_HORIZON,
 )
 
@@ -106,15 +113,16 @@ else:
     print("="*90)
     print("\n\n\n")
 
-result = run_tsfm_finetuning(
+result = run_tsfm_finetuning_chronos(
     dataset_path=str(subset_dataset_path),
     timestamp_column=TIMESTAMP_COLUMN,
     target_columns=[TARGET_COLUMN],
-    model_checkpoint="ttm_96_28",
+    model_checkpoint="amazon/chronos-2",
     save_model_dir="tunedmodels",
     forecast_horizon=FORECAST_HORIZON,
     n_finetune=0.05,
     n_test=0.05,
+    num_steps=NUM_STEPS,
 )
 
 status = getattr(result, 'status', None)
@@ -125,7 +133,7 @@ if status == 'success':
         print(f"  Message: {message}")
     if hasattr(result, 'model_checkpoint'):
         print(f"  Model: {result.model_checkpoint}")
-        finetuned_forecast_result = run_tsfm_forecasting(
+        finetuned_forecast_result = run_tsfm_forecasting_chronos(
             dataset_path=str(forecast_dataset_path),
             timestamp_column=TIMESTAMP_COLUMN,
             target_columns=[TARGET_COLUMN],
