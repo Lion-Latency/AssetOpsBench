@@ -74,6 +74,37 @@ def _make_json_compatible(obj):
 # ── Dataset reading ───────────────────────────────────────────────────────────
 
 
+def _normalize_timestamp_column(
+    data_df: pd.DataFrame, timestamp_column: str
+) -> pd.DataFrame:
+    if timestamp_column not in data_df.columns:
+        return data_df
+
+    raw_timestamps = data_df[timestamp_column]
+    parsed_timestamps = pd.to_datetime(
+        raw_timestamps, format="ISO8601", utc=True, errors="coerce"
+    )
+    unparsed_non_null = parsed_timestamps.isna() & raw_timestamps.notna()
+    if unparsed_non_null.any():
+        parsed_timestamps.loc[unparsed_non_null] = pd.to_datetime(
+            raw_timestamps.loc[unparsed_non_null],
+            format="mixed",
+            utc=True,
+            errors="coerce",
+        )
+
+    invalid_mask = parsed_timestamps.isna() & raw_timestamps.notna()
+    if invalid_mask.any():
+        raise ValueError(
+            f"Failed to parse timestamp column '{timestamp_column}' in dataset"
+        )
+
+    valid_mask = parsed_timestamps.notna()
+    normalized_df = data_df.loc[valid_mask].copy()
+    normalized_df[timestamp_column] = parsed_timestamps.loc[valid_mask]
+    return normalized_df
+
+
 def _read_ts_data(dataset_path: str, dataset_config_dictionary=None) -> pd.DataFrame:
     if dataset_config_dictionary is not None:
         timestamp_column = dataset_config_dictionary["column_specifiers"][
@@ -93,8 +124,9 @@ def _read_ts_data(dataset_path: str, dataset_config_dictionary=None) -> pd.DataF
     if ".csv" in dataset_path:
         if dataset_config_dictionary is not None:
             col_spec = dataset_config_dictionary["column_specifiers"]
-            data_df = pd.read_csv(
-                dataset_path, parse_dates=[col_spec["timestamp_column"]]
+            data_df = pd.read_csv(dataset_path)
+            data_df = _normalize_timestamp_column(
+                data_df, col_spec["timestamp_column"]
             )
         else:
             data_df = pd.read_csv(dataset_path)
@@ -121,8 +153,9 @@ def _read_ts_data(dataset_path: str, dataset_config_dictionary=None) -> pd.DataF
     elif ".xlsx" in dataset_path:
         if dataset_config_dictionary is not None:
             col_spec = dataset_config_dictionary["column_specifiers"]
-            data_df = pd.read_excel(
-                dataset_path, parse_dates=[col_spec["timestamp_column"]]
+            data_df = pd.read_excel(dataset_path)
+            data_df = _normalize_timestamp_column(
+                data_df, col_spec["timestamp_column"]
             )
         else:
             data_df = pd.read_excel(dataset_path)

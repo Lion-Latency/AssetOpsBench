@@ -1,11 +1,12 @@
 from pathlib import Path
 import sys
 
-repo_root = Path(__file__).resolve().parents[2]
+repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "synthetic_data"
+FUNCTIONALITY_VERIFICATION_DIR = BASE_DIR.parent
+DATA_DIR = FUNCTIONALITY_VERIFICATION_DIR / "synthetic_data"
 MODELS_DIR = repo_root / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
 
 from src.servers.tsfm.main import run_tsfm_forecasting, run_tsad

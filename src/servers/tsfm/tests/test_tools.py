@@ -101,6 +101,38 @@ class TestRunTSFMForecastingValidation:
         assert "error" in data
 
 
+class TestRunTSFMForecastingChronosValidation:
+    @pytest.mark.anyio
+    async def test_empty_dataset_path_returns_error(self):
+        data = await call_tool(
+            mcp, "run_tsfm_forecasting_chronos",
+            {"dataset_path": "", "timestamp_column": "ts", "target_columns": ["val"]},
+        )
+        assert "error" in data
+        assert "dataset_path" in data["error"]
+
+    @pytest.mark.anyio
+    async def test_empty_target_columns_returns_error(self):
+        data = await call_tool(
+            mcp, "run_tsfm_forecasting_chronos",
+            {"dataset_path": "/tmp/data.csv", "timestamp_column": "ts", "target_columns": []},
+        )
+        assert "error" in data
+        assert "target_columns" in data["error"]
+
+    @pytest.mark.anyio
+    async def test_missing_deps_returns_error(self):
+        data = await call_tool(
+            mcp, "run_tsfm_forecasting_chronos",
+            {
+                "dataset_path": "/nonexistent/data.csv",
+                "timestamp_column": "Timestamp",
+                "target_columns": ["sensor_1"],
+            },
+        )
+        assert "error" in data
+
+
 # ── run_tsfm_finetuning — input validation ────────────────────────────────────
 
 class TestRunTSFMFinetuningValidation:
