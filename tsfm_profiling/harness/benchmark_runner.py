@@ -45,6 +45,11 @@ MODES = {
     "combined":   {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "1",
                    "TSFM_PREPROCESS_WORKERS": "4",
                    "TSFM_PREPROCESS_EXECUTOR": "thread"},
+    "parallelism_only": {
+    "TSFM_CACHE_ENABLED": "0",
+    "TSFM_PREPROCESS_OPT": "1",
+    "TSFM_PREPROCESS_WORKERS": "4",
+    "TSFM_PREPROCESS_EXECUTOR": "thread"},
 }
 
 
@@ -308,7 +313,7 @@ def main():
         "repeats": 5,
     }
 
-    modes = os.environ.get("TSFM_BENCH_MODES", "baseline,cache_only,combined").split(",")
+    modes = os.environ.get("TSFM_BENCH_MODES", "baseline,cache_only,parallelism_only,combined").split(",")
     modes = [m.strip() for m in modes if m.strip() in MODES]
 
     timestamp = time.strftime("%Y%m%d_%H%M%S")
