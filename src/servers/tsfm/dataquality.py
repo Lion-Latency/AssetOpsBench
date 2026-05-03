@@ -57,7 +57,7 @@ def _df_percentage_samples_minutes_interval(
 ):
     assert upper_bound >= lower_bound, "lower bound is larger than upper bound"
     df = df.sort_values(by=date_col)
-    time_diffs = df[date_col].diff().dt.total_seconds() / 60.0
+    time_diffs = df[date_col].dt.tz_localize(None).diff().dt.total_seconds() / 60.0
     interval_count = ((time_diffs >= lower_bound) & (time_diffs <= upper_bound)).sum()
     total_intervals = len(time_diffs) - 1
     return (interval_count / total_intervals) * 100 if total_intervals > 0 else 0
@@ -169,7 +169,7 @@ def _time_series_frequency_interval_segmentation(
     df, time_column, lower_bound=14, upper_bound=16
 ):
     df = df.sort_values(by=time_column).reset_index(drop=True)
-    df["dt"] = df[time_column].diff().dt.total_seconds() / 60.0
+    df["dt"] = df[time_column].dt.tz_localize(None).diff().dt.total_seconds() / 60.0
     df["segment_id"] = 0
     segment_id = 0
     start_idx = 0
@@ -219,7 +219,7 @@ def _validate_time_series_segments(
             lower_bound=lower_bound,
             upper_bound=upper_bound,
         )
-        qc["sampling_dt_condition"] = perc == 100
+        qc["sampling_dt_condition"] = perc >= 50
         if not all(qc.values()):
             bad_quality_segments[seg_id] = qc
     return bad_quality_segments
@@ -278,7 +278,7 @@ def _dq_timeseries_segmentation(
             df_cleaned = _remove_df_nans(df_cleaned, p=p_nan_rows, dim="rows")
 
     df_cleaned[timestamp_tag] = pd.to_datetime(
-        df_cleaned[timestamp_tag], format="ISO8601", utc=True, errors="coerce"
+        df_cleaned[timestamp_tag], format="mixed", utc=True
     )
     df_cleaned = df_cleaned.dropna(subset=[timestamp_tag])
 

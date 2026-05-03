@@ -44,7 +44,7 @@ def _tsfm_data_quality_filter(
         data_col.extend(dataset_config_dictionary["operation_on_column"])
 
     df = df_dataframe[data_col].copy()
-    df[timestamp_col] = pd.to_datetime(df[timestamp_col], format='ISO8601', utc=True) # UTC set to true to avoid error with mismatched timezones
+    df[timestamp_col] = pd.to_datetime(df[timestamp_col], format="mixed")
     for col in data_col:
         if col != timestamp_col:
             df[col] = df[col].astype(float)
@@ -65,7 +65,7 @@ def _tsfm_data_quality_filter(
             frequency_minutes = _freq_token_to_minutes[freq_str]
 
     if frequency_minutes is None:
-        timestamps = pd.to_datetime(df[timestamp_col], format='ISO8601', utc=True) # UTC set to true to avoid error with mismatched timezones
+        timestamps = pd.to_datetime(df[timestamp_col], format="mixed", utc=True)
         time_diffs = timestamps.diff().dropna()
         frequency_minutes = float(time_diffs.dt.total_seconds().div(60).median())
 

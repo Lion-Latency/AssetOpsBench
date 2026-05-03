@@ -201,12 +201,4 @@ mcp/couchdb/sample_data/bulk_docs.json
 .env
 mcp/servers/tsfm/artifacts/tsfm_models/
 src/tmp/
-
-# TSFM profiling data
-tsfm_profiling/functionality_verification/synthetic_data/
-tsfm_profiling/functionality_verification/data/
-
-# Profiling results
-tsfm_profiling/harness/results
-tsfm_profiling/profiling/results
-wandb
+wandb/

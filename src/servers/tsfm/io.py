@@ -124,10 +124,11 @@ def _read_ts_data(dataset_path: str, dataset_config_dictionary=None) -> pd.DataF
     if ".csv" in dataset_path:
         if dataset_config_dictionary is not None:
             col_spec = dataset_config_dictionary["column_specifiers"]
-            data_df = pd.read_csv(
-                dataset_path, parse_dates=[col_spec["timestamp_column"]],
-                date_format='ISO8601',
-            )
+            data_df = pd.read_csv(dataset_path)
+            data_df[col_spec["timestamp_column"]] = pd.to_datetime(
+            data_df[col_spec["timestamp_column"]], format="mixed", utc=True
+            ).dt.tz_localize(None)
+
         else:
             data_df = pd.read_csv(dataset_path)
 
@@ -153,9 +154,11 @@ def _read_ts_data(dataset_path: str, dataset_config_dictionary=None) -> pd.DataF
     elif ".xlsx" in dataset_path:
         if dataset_config_dictionary is not None:
             col_spec = dataset_config_dictionary["column_specifiers"]
-            data_df = pd.read_excel(dataset_path)
-            data_df = _normalize_timestamp_column(
-                data_df, col_spec["timestamp_column"]
+            data_df = pd.read_excel(
+                dataset_path, dtype_backend="numpy_nullable"
+            )
+            data_df[col_spec["timestamp_column"]] = pd.to_datetime(
+                data_df[col_spec["timestamp_column"]], format="mixed", utc=True
             )
         else:
             data_df = pd.read_excel(dataset_path)
