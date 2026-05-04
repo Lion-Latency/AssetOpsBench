@@ -109,6 +109,59 @@ def timed_run(fn, **kwargs):
     return result, latency, rss_delta
 
 
+def _sanitize_label(s) -> str:
+    return str(s).replace(" ", "_").replace("/", "_").replace(".", "_")
+
+
+def _flatten_performance(perf) -> dict:
+    out: dict = {}
+    if not isinstance(perf, dict) or not perf:
+        return out
+
+    cols = list(perf.keys())
+    all_subdicts = all(isinstance(perf[c], dict) for c in cols)
+
+    if all_subdicts and "value" in cols:
+        label_cols = [c for c in ("split", "target", "metric") if c in cols]
+        h_col = "forecast" if "forecast" in cols else None
+
+        for ridx in perf["value"].keys():
+            try:
+                val = float(perf["value"][ridx])
+            except (TypeError, ValueError):
+                continue
+
+            parts = [_sanitize_label(perf[c].get(ridx)) for c in label_cols if perf[c].get(ridx) is not None]
+            if h_col is not None and perf[h_col].get(ridx) is not None:
+                parts.append(f"h{perf[h_col][ridx]}")
+
+            key = "perf_" + "_".join(parts) if parts else f"perf_value_{ridx}"
+            out[key] = val
+
+        if "train_time" in cols:
+            for ridx in perf["train_time"]:
+                try:
+                    out["perf_train_time"] = float(perf["train_time"][ridx])
+                    break
+                except (TypeError, ValueError):
+                    continue
+        return out
+
+    for key, val in perf.items():
+        if isinstance(val, dict):
+            for k, v in val.items():
+                try:
+                    out[f"perf_{key}_{k}"] = float(list(v.values())[0]) if isinstance(v, dict) else float(v)
+                except (TypeError, ValueError):
+                    pass
+        else:
+            try:
+                out[f"perf_{key}"] = float(val)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def extract_performance_metrics(result) -> dict:
     metrics = {}
     results_file = getattr(result, "results_file", None)
@@ -117,20 +170,7 @@ def extract_performance_metrics(result) -> dict:
             with open(results_file, "r") as f:
                 data = json.load(f)
             if isinstance(data, dict) and "performance" in data:
-                perf = data["performance"]
-                if isinstance(perf, dict):
-                    for key, val in perf.items():
-                        if isinstance(val, dict):
-                            for k, v in val.items():
-                                try:
-                                    metrics[f"perf_{key}_{k}"] = float(list(v.values())[0]) if isinstance(v, dict) else float(v)
-                                except (TypeError, ValueError):
-                                    pass
-                        else:
-                            try:
-                                metrics[f"perf_{key}"] = float(val)
-                            except (TypeError, ValueError):
-                                pass
+                metrics.update(_flatten_performance(data["performance"]))
             if isinstance(data, dict) and "anomaly_count" in data:
                 metrics["anomaly_count"] = data["anomaly_count"]
             if isinstance(data, dict) and "total_records" in data:
@@ -339,8 +379,7 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
 
 BENCHMARKS = {
     "forecasting": bench_forecasting,
-    "finetuning": bench_finetuning,
-    "tsad": bench_tsad,
+    #"finetuning": bench_finetuning,
     "integrated_tsad": bench_integrated_tsad,
 }
 
