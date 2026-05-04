@@ -23,7 +23,7 @@ SUBSET_START_ROW = 789000
 FORECAST_HORIZON = 24
 SUBSET_NROWS = 2000
 
-from src.servers.tsfm.interchangeable_model_interface.models.chronos import Chronos
+from src.servers.tsfm.main import run_integrated_tsad_chronos
 
 print("\n" + "="*75)
 print("INTEGRATED ANOMALY DETECTION CHECK (Interchangeable Model with Chronos)")
@@ -40,16 +40,11 @@ subset_df = pd.read_csv(
 subset_dataset_path = Path(tempfile.mkdtemp()) / "dhaval_main_flat_subset.csv"
 subset_df.to_csv(subset_dataset_path, index=False)
 
-interchangeable_model = Chronos(
-    model_checkpoint="amazon/chronos-2",
-    context_length=0,
-    prediction_filter_length=FORECAST_HORIZON,
-)
-
-result = interchangeable_model.integrated_anomaly_detection(
+result = run_integrated_tsad_chronos(
     dataset_path=str(subset_dataset_path),
     timestamp_column=TIMESTAMP_COLUMN,
     target_columns=[TARGET_COLUMN],
+    model_checkpoint="amazon/chronos-2",
     false_alarm=0.05,
     n_calibration=0.2,
 )

@@ -627,6 +627,7 @@ def run_tsfm_finetuning(
         ),
     )
 
+
 @mcp.tool()
 def run_tsfm_finetuning_chronos(
     dataset_path: str,
@@ -922,6 +923,89 @@ def run_tsad(
     )
 
 
+@mcp.tool()
+def run_tsad_chronos(
+    dataset_path: str,
+    tsfm_output_json: str,
+    timestamp_column: str,
+    target_columns: List[str],
+    task: str = "fit",
+    false_alarm: float = 0.05,
+    ad_model_type: str = "timeseries_conformal_adaptive",
+    ad_model_checkpoint: Optional[str] = None,
+    ad_model_save: Optional[str] = None,
+    n_calibration: float = 0.2,
+    conditional_columns: Optional[List[str]] = None,
+    id_columns: Optional[List[str]] = None,
+    frequency_sampling: Optional[str] = None,
+    autoregressive_modeling: bool = True,
+    model_checkpoint: str = "amazon/chronos-2",
+) -> Union[TSADResult, ErrorResult]:
+
+    if not dataset_path.strip():
+        return ErrorResult(error="dataset_path is required")
+    if not tsfm_output_json.strip():
+        return ErrorResult(error="tsfm_output_json is required")
+    if not target_columns:
+        return ErrorResult(error="target_columns must not be empty")
+    if task not in ("fit", "inference"):
+        return ErrorResult(error="task must be 'fit' or 'inference'")
+
+    try:
+        import chronos  # noqa: F401
+        from .interchangeable_model_interface.models.chronos import Chronos
+    except ImportError as exc:
+        return ErrorResult(error=f"chronos dependencies unavailable: {exc}")
+
+    metrics = RequestMetrics(
+        tool="run_tsad_chronos",
+        metadata={
+            "dataset_path": dataset_path,
+            "tsfm_output_json": tsfm_output_json,
+            "model_checkpoint": model_checkpoint,
+        },
+    )
+
+    candidate_model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
+    resolved_model_checkpoint = model_checkpoint
+    if os.path.isabs(model_checkpoint) or os.path.exists(model_checkpoint):
+        resolved_model_checkpoint = model_checkpoint
+    elif os.path.exists(candidate_model_checkpoint):
+        resolved_model_checkpoint = candidate_model_checkpoint
+
+    try:
+        interchangeable_model = Chronos(
+            model_checkpoint=resolved_model_checkpoint,
+            context_length=0,
+            prediction_filter_length=1,
+        )
+        result = interchangeable_model.anomaly_detection(
+            dataset_path=dataset_path,
+            tsfm_output_json=tsfm_output_json,
+            timestamp_column=timestamp_column,
+            target_columns=target_columns,
+            task=task,
+            false_alarm=false_alarm,
+            ad_model_type=ad_model_type,
+            ad_model_checkpoint=ad_model_checkpoint,
+            ad_model_save=ad_model_save,
+            n_calibration=n_calibration,
+            conditional_columns=conditional_columns,
+            id_columns=id_columns,
+            frequency_sampling=frequency_sampling,
+            autoregressive_modeling=autoregressive_modeling,
+            metrics=metrics,
+        )
+    except Exception as exc:
+        logger.error("run_tsad_chronos failed: %s", exc)
+        return ErrorResult(error=str(exc))
+
+    if getattr(result, "status", None) == "success":
+        _emit_metrics(metrics)
+
+    return result
+
+
 # ── Integrated TSAD (forecasting + anomaly detection in one call) ─────────────
 
 
@@ -1128,6 +1212,77 @@ def run_integrated_tsad(
             f"across {len(target_columns)} column(s). Results saved to {csv_path}."
         ),
     )
+
+
+@mcp.tool()
+def run_integrated_tsad_chronos(
+    dataset_path: str,
+    timestamp_column: str,
+    target_columns: List[str],
+    model_checkpoint: str = "amazon/chronos-2",
+    false_alarm: float = 0.05,
+    ad_model_type: str = "timeseries_conformal_adaptive",
+    n_calibration: float = 0.2,
+    conditional_columns: Optional[List[str]] = None,
+    id_columns: Optional[List[str]] = None,
+    frequency_sampling: str = "",
+    autoregressive_modeling: bool = True,
+) -> Union[TSADResult, ErrorResult]:
+    if not dataset_path.strip():
+        return ErrorResult(error="dataset_path is required")
+    if not target_columns:
+        return ErrorResult(error="target_columns must not be empty")
+
+    try:
+        import chronos  # noqa: F401
+        from .interchangeable_model_interface.models.chronos import Chronos
+    except ImportError as exc:
+        return ErrorResult(error=f"chronos dependencies unavailable: {exc}")
+
+    metrics = RequestMetrics(
+        tool="run_integrated_tsad_chronos",
+        metadata={
+            "dataset_path": dataset_path,
+            "model_checkpoint": model_checkpoint,
+            "n_target_columns": len(target_columns),
+        },
+    )
+
+    candidate_model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
+    resolved_model_checkpoint = model_checkpoint
+    if os.path.isabs(model_checkpoint) or os.path.exists(model_checkpoint):
+        resolved_model_checkpoint = model_checkpoint
+    elif os.path.exists(candidate_model_checkpoint):
+        resolved_model_checkpoint = candidate_model_checkpoint
+
+    try:
+        interchangeable_model = Chronos(
+            model_checkpoint=resolved_model_checkpoint,
+            context_length=0,
+            prediction_filter_length=1,
+        )
+        result = interchangeable_model.integrated_anomaly_detection(
+            dataset_path=dataset_path,
+            timestamp_column=timestamp_column,
+            target_columns=target_columns,
+            model_checkpoint=resolved_model_checkpoint,
+            false_alarm=false_alarm,
+            ad_model_type=ad_model_type,
+            n_calibration=n_calibration,
+            conditional_columns=conditional_columns,
+            id_columns=id_columns,
+            frequency_sampling=frequency_sampling,
+            autoregressive_modeling=autoregressive_modeling,
+            metrics=metrics,
+        )
+    except Exception as exc:
+        logger.error("run_integrated_tsad_chronos failed: %s", exc)
+        return ErrorResult(error=str(exc))
+
+    if getattr(result, "status", None) == "success":
+        _emit_metrics(metrics)
+
+    return result
 
 
 def main():

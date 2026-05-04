@@ -5,7 +5,7 @@ import sys
 repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
-from src.servers.tsfm.interchangeable_model_interface.models.chronos import Chronos
+from src.servers.tsfm.main import run_tsad_chronos
 
 print("\n" + "="*90)
 print("ANOMALY DETECTION CHECK (Interchangeable Model with Chronos)")
@@ -21,17 +21,12 @@ print("="*60)
 if getattr(forecast["result"], "status", None) == "success" and hasattr(
     forecast["result"], "results_file"
 ):
-    interchangeable_model = Chronos(
-        model_checkpoint="amazon/chronos-2",
-        context_length=0,
-        prediction_filter_length=forecast["FORECAST_HORIZON"]
-    )
-    
-    tsad_result = interchangeable_model.anomaly_detection(
+    tsad_result = run_tsad_chronos(
         dataset_path=str(forecast["subset_dataset_path"]),
         tsfm_output_json=forecast["result"].results_file,
         timestamp_column=forecast["TIMESTAMP_COLUMN"],
         target_columns=[forecast["TARGET_COLUMN"]],
+        model_checkpoint="amazon/chronos-2",
         task="fit",
         false_alarm=0.05,
         n_calibration=0.2,
