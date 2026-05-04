@@ -8,7 +8,6 @@ Tools:
   get_ai_tasks          – list available AI task types (static, no deps)
   get_tsfm_models       – list available pre-trained model checkpoints (static)
   run_tsfm_forecasting  – zero-shot TTM inference on a dataset
-    run_tsfm_forecasting_chronos – zero-shot Chronos inference on a dataset
   run_tsfm_finetuning   – few-shot finetuning of a TTM model
   run_tsad              – conformal anomaly detection on TSFM forecasts
   run_integrated_tsad   – end-to-end: forecasting + anomaly detection
@@ -35,6 +34,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from . import cache as _cache
 from . import parallel as _parallel
 from . import cache as _cache
 from .anomaly import _TimeSeriesAnomalyDetectionConformalWrapper
