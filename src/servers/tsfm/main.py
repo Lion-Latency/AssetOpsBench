@@ -8,6 +8,7 @@ Tools:
   get_ai_tasks          – list available AI task types (static, no deps)
   get_tsfm_models       – list available pre-trained model checkpoints (static)
   run_tsfm_forecasting  – zero-shot TTM inference on a dataset
+    run_tsfm_forecasting_chronos – zero-shot Chronos inference on a dataset
   run_tsfm_finetuning   – few-shot finetuning of a TTM model
   run_tsad              – conformal anomaly detection on TSFM forecasts
   run_integrated_tsad   – end-to-end: forecasting + anomaly detection
@@ -296,6 +297,158 @@ def run_tsfm_forecasting(
     )
 
 
+@mcp.tool()
+def run_tsfm_forecasting_chronos(
+    dataset_path: str,
+    timestamp_column: str,
+    target_columns: List[str],
+    model_checkpoint: str = "amazon/chronos-2",
+    forecast_horizon: int = -1,
+    conditional_columns: Optional[List[str]] = None,
+    id_columns: Optional[List[str]] = None,
+    frequency_sampling: str = "oov",
+    autoregressive_modeling: bool = True,
+    include_dataquality_summary: bool = False,
+) -> Union[ForecastingResult, ErrorResult]:
+    """Run zero-shot time-series forecasting with the Chronos interchangeable adapter.
+
+    Returns a ForecastingResult whose results_file is the path to a JSON file
+    with raw predictions (target_prediction, timestamp, target_columns arrays).
+
+    Args:
+        dataset_path: Path to a CSV, JSON, or XLSX dataset.
+        timestamp_column: Name of the timestamp column.
+        target_columns: Columns to forecast.
+        model_checkpoint: Hugging Face model id or local checkpoint path.
+        forecast_horizon: Number of steps to forecast; -1 uses the model default.
+        conditional_columns: Exogenous / conditional feature columns.
+        id_columns: ID columns for multi-entity grouped time series.
+        frequency_sampling: Sampling frequency string (e.g. '15_minutes') or
+            'oov' to auto-detect from the data.
+        autoregressive_modeling: Included for API parity with run_tsfm_forecasting.
+        include_dataquality_summary: Attach a lightweight summary to the result.
+    """
+    if not dataset_path.strip():
+        return ErrorResult(error="dataset_path is required")
+    if not target_columns:
+        return ErrorResult(error="target_columns must not be empty")
+
+    try:
+        import chronos  # noqa: F401
+        from .interchangeable_model_interface.models.chronos import Chronos
+    except ImportError as exc:
+        return ErrorResult(error=f"chronos dependencies unavailable: {exc}")
+
+    metrics = RequestMetrics(
+        tool="run_tsfm_forecasting_chronos",
+        metadata={"dataset_path": dataset_path, "model_checkpoint": model_checkpoint},
+    )
+
+    candidate_model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
+    resolved_model_checkpoint = model_checkpoint
+    if os.path.isabs(model_checkpoint) or os.path.exists(model_checkpoint):
+        resolved_model_checkpoint = model_checkpoint
+    elif os.path.exists(candidate_model_checkpoint):
+        resolved_model_checkpoint = candidate_model_checkpoint
+
+    dataset_path = _get_dataset_path(dataset_path)
+    dataset_config = _build_dataset_config(
+        timestamp_column,
+        target_columns,
+        conditional_columns,
+        id_columns,
+        frequency_sampling,
+        autoregressive_modeling,
+    )
+
+    try:
+        with stage_timer("data_retrieval", metrics):
+            data_df = _read_ts_data(
+                dataset_path, dataset_config_dictionary=dataset_config
+            )
+            selected_columns = list(
+                dict.fromkeys(
+                    (id_columns or [])
+                    + [timestamp_column]
+                    + (conditional_columns or [])
+                    + target_columns
+                )
+            )
+            data_df = data_df[selected_columns].copy()
+
+        if len(data_df) == 0:
+            return ErrorResult(error="Dataset is empty after loading the requested columns")
+
+        prediction_filter_length = forecast_horizon if forecast_horizon != -1 else 1
+        interchangeable_model = Chronos(
+            model_checkpoint=resolved_model_checkpoint,
+            context_length=0,
+            prediction_filter_length=prediction_filter_length,
+        )
+
+        with stage_timer("model_loading", metrics):
+            interchangeable_model.load_model(resolved_model_checkpoint)
+            if forecast_horizon == -1:
+                interchangeable_model.prediction_filter_length = (
+                    interchangeable_model.model.model_prediction_length
+                )
+
+        chronos_model_config = {
+            "context_length": max(3, interchangeable_model.prediction_filter_length),
+            "prediction_length": interchangeable_model.prediction_filter_length,
+        }
+
+        with stage_timer("data_quality_filter", metrics):
+            output_data_quality = _tsfm_data_quality_filter(
+                data_df, dataset_config, chronos_model_config, task="inference"
+            )
+            data_df = output_data_quality["data"]
+            dataset_config = output_data_quality["dataset_config_dictionary"]
+
+        if len(data_df) == 0:
+            return ErrorResult(
+                error="Data quality was poor; after filtering, no continuous segment satisfied the "
+                "minimum history requirement. Check Data Quality Summary."
+            )
+
+        column_specifiers = dataset_config["column_specifiers"].copy()
+        column_specifiers["id_columns"] = dataset_config["id_columns"]
+        column_specifiers["frequency_sampling"] = dataset_config["frequency_sampling"]
+
+        output = interchangeable_model.forecast(
+            data_df, column_specifiers, metrics=metrics
+        )
+        inference_result_dict_data = {
+            "target_prediction": output["target_prediction"].tolist(),
+            "timestamp": np.array(output["timestamp_prediction"]).astype(str).tolist(),
+            "target_columns": output["target_columns"],
+        }
+
+        with stage_timer("serialization", metrics):
+            results_file = _write_json_to_temp(
+                json.dumps(inference_result_dict_data, indent=4)
+            )
+
+    except Exception as exc:
+        logger.error("run_tsfm_forecasting_chronos failed: %s", exc)
+        return ErrorResult(error=str(exc))
+
+    _emit_metrics(metrics)
+
+    dataquality_summary = (
+        output_data_quality["dataquality_summary"]
+        if include_dataquality_summary
+        else None
+    )
+
+    return ForecastingResult(
+        status="success",
+        results_file=results_file,
+        dataquality_summary=dataquality_summary,
+        message=f"Forecasting complete. Predictions saved to {results_file}.",
+    )
+
+
 # ── TSFM Finetuning ───────────────────────────────────────────────────────────
 
 
@@ -435,6 +588,179 @@ def run_tsfm_finetuning(
     except Exception as exc:
         logger.warning("Could not resolve finetuned checkpoint path: %s", exc)
         saved_checkpoint = save_model_dir
+
+    return FinetuningResult(
+        status="success",
+        model_checkpoint=saved_checkpoint,
+        results_file=results_file,
+        message=(
+            f"Fine-tuning complete. Model saved to {saved_checkpoint}. "
+            f"Metrics saved to {results_file}."
+        ),
+    )
+
+@mcp.tool()
+def run_tsfm_finetuning_chronos(
+    dataset_path: str,
+    timestamp_column: str,
+    target_columns: List[str],
+    model_checkpoint: str = "amazon/chronos-2",
+    save_model_dir: str = "tuned_models",
+    forecast_horizon: int = -1,
+    n_finetune: float = 0.05,
+    n_calibration: float = 0.0,
+    n_test: float = 0.05,
+    num_steps: int = 1000,
+    conditional_columns: Optional[List[str]] = None,
+    id_columns: Optional[List[str]] = None,
+    frequency_sampling: str = "oov",
+    autoregressive_modeling: bool = True,
+    include_dataquality_summary: bool = False,
+) -> Union[FinetuningResult, ErrorResult]:
+    """Few-shot fine-tune a Chronos-2 model on a local dataset.
+
+    Returns a FinetuningResult with the saved checkpoint path and a JSON file
+    containing per-forecast-horizon performance metrics.
+
+    Args:
+        dataset_path: Path to the training dataset (CSV/JSON/XLSX).
+        timestamp_column: Name of the timestamp column.
+        target_columns: Columns to forecast and fine-tune on.
+        model_checkpoint: Hugging Face model id.
+        save_model_dir: Directory to save the fine-tuned model checkpoint.
+        forecast_horizon: Steps to forecast; -1 uses the model default.
+        n_finetune: Fraction (≤1) or count (>1) of samples for fine-tuning.
+        n_calibration: Fraction or count for calibration set (default 0).
+        n_test: Fraction or count for test evaluation (default 0.05).
+        num_steps: Number of Chronos training steps; lower values finish faster.
+        conditional_columns: Exogenous feature columns.
+        id_columns: ID columns for grouped time series.
+        frequency_sampling: Sampling frequency string or 'oov' to auto-detect.
+        autoregressive_modeling: Use autoregressive mode when True.
+        include_dataquality_summary: Attach a data-quality report to the result.
+    """
+    if not dataset_path.strip():
+        return ErrorResult(error="dataset_path is required")
+    if not target_columns:
+        return ErrorResult(error="target_columns must not be empty")
+    if num_steps <= 0:
+        return ErrorResult(error="num_steps must be positive")
+
+    try:
+        import chronos  # noqa: F401
+        from .interchangeable_model_interface.models.chronos import Chronos
+    except ImportError as exc:
+        return ErrorResult(error=f"chronos dependencies unavailable: {exc}")
+
+    metrics = RequestMetrics(
+        tool="run_tsfm_finetuning_chronos",
+        metadata={
+            "dataset_path": dataset_path,
+            "model_checkpoint": model_checkpoint,
+            "num_steps": num_steps,
+        },
+    )
+
+    candidate_model_checkpoint = _get_model_checkpoint_path(model_checkpoint)
+    resolved_model_checkpoint = model_checkpoint
+    if os.path.isabs(model_checkpoint) or os.path.exists(model_checkpoint):
+        resolved_model_checkpoint = model_checkpoint
+    elif os.path.exists(candidate_model_checkpoint):
+        resolved_model_checkpoint = candidate_model_checkpoint
+
+    dataset_path = _get_dataset_path(dataset_path)
+    abs_save_dir = _get_outputs_path(save_model_dir)
+    dataset_config = _build_dataset_config(
+        timestamp_column,
+        target_columns,
+        conditional_columns,
+        id_columns,
+        frequency_sampling,
+        autoregressive_modeling,
+    )
+
+    try:
+        # ── Stage: data_retrieval ─────────────────────────────────────────
+        with stage_timer("data_retrieval", metrics):
+            data_df = _read_ts_data(dataset_path, dataset_config_dictionary=dataset_config)
+            selected_columns = list(
+                dict.fromkeys(
+                    (id_columns or [])
+                    + [timestamp_column]
+                    + (conditional_columns or [])
+                    + target_columns
+                )
+            )
+            data_df = data_df[selected_columns].copy()
+
+        with stage_timer("data_quality_filter", metrics):
+            pass
+
+        if len(data_df) == 0:
+            return ErrorResult(error="Dataset is empty after loading the requested columns")
+
+        prediction_filter_length = forecast_horizon if forecast_horizon != -1 else 1
+        interchangeable_model = Chronos(
+            model_checkpoint=resolved_model_checkpoint,
+            context_length=0,
+            prediction_filter_length=prediction_filter_length,
+        )
+
+        # ── Stage: model_loading ─────────────────────────────────────────
+        with stage_timer("model_loading", metrics):
+            interchangeable_model.load_model(resolved_model_checkpoint)
+        if forecast_horizon == -1:
+            interchangeable_model.prediction_filter_length = (
+                interchangeable_model.model.model_prediction_length
+            )
+        if not interchangeable_model.context_length:
+            interchangeable_model.context_length = getattr(
+                interchangeable_model.model,
+                "model_context_length",
+                interchangeable_model.prediction_filter_length,
+            )
+
+        os.makedirs(abs_save_dir, exist_ok=True)
+
+        column_specifiers = dataset_config["column_specifiers"].copy()
+        column_specifiers["id_columns"] = dataset_config["id_columns"]
+        column_specifiers["frequency_sampling"] = dataset_config["frequency_sampling"]
+
+        output = interchangeable_model.finetune(
+            data_df,
+            column_specifiers,
+            n_finetune=n_finetune,
+            n_test=n_test,
+            save_model_dir=abs_save_dir,
+            num_steps=num_steps,
+        )
+
+        # ── Stage: serialization ──────────────────────────────────────────
+        with stage_timer("serialization", metrics):
+            result_dict = output.copy()
+            result_dict["performance"] = result_dict["performance"].to_dict()
+
+            if "performance" in result_dict:
+                df_perf = pd.DataFrame(result_dict["performance"])
+                df_perf["forecast"] = df_perf["forecast"].values + 1
+                max_forecast = df_perf["forecast"].max()
+                if 0 < forecast_horizon <= max_forecast:
+                    result_dict["performance"] = df_perf.loc[
+                        df_perf["forecast"] == forecast_horizon
+                    ].to_dict()
+
+            if include_dataquality_summary:
+                result_dict["dataquality_summary"] = None
+
+            results_file = _write_json_to_temp(json.dumps(result_dict, indent=4))
+
+    except Exception as exc:
+        logger.error("run_tsfm_finetuning_chronos failed: %s", exc)
+        return ErrorResult(error=str(exc))
+
+    _emit_metrics(metrics)
+
+    saved_checkpoint = output.get("save_model_dir", abs_save_dir)
 
     return FinetuningResult(
         status="success",
@@ -686,10 +1012,22 @@ def run_integrated_tsad(
             tsmodel_pred = inference_data
 
             try:
+                col_config_for_tsad = {**col_config_filtered}
+                if "id_columns" in col_config_for_tsad:
+                    col_config_for_tsad["id_columns"] = [
+                        c for c in col_config_for_tsad["id_columns"] if c != "segment_id"
+                    ]
+                if "id_columns" in col_config_for_tsad.get("column_specifiers", {}):
+                    col_config_for_tsad["column_specifiers"] = {
+                        **col_config_for_tsad["column_specifiers"],
+                        "id_columns": [
+                            c for c in col_config_for_tsad["column_specifiers"]["id_columns"] if c != "segment_id"
+                        ],
+                    }
                 with stage_timer(f"anomaly_detection_col{col_idx}", metrics):
                     tsad_output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
                         dataset_path,
-                        col_config,
+                        col_config_for_tsad,
                         tsmodel_pred,
                         ad_model_checkpoint=None,
                         ad_model_save=ad_model_save,

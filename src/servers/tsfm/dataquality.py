@@ -278,7 +278,7 @@ def _dq_timeseries_segmentation(
             df_cleaned = _remove_df_nans(df_cleaned, p=p_nan_rows, dim="rows")
 
     df_cleaned[timestamp_tag] = pd.to_datetime(
-        df_cleaned[timestamp_tag], errors="coerce"
+        df_cleaned[timestamp_tag], format="ISO8601", utc=True, errors="coerce"
     )
     df_cleaned = df_cleaned.dropna(subset=[timestamp_tag])
 
