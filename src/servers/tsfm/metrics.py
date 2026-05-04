@@ -75,6 +75,8 @@ def _Bias(y_true, y_pred, axis=None):
 def _NRMSE(y_true, y_pred, axis=None, norm="mean"):
     values = _RMSE(y_true, y_pred, axis=axis)
     den = (np.max(y_true) - np.min(y_true)) if norm == "minmax" else np.mean(y_true)
+    if np.abs(den) == 0:
+        return None
     return np.sqrt(values) / np.abs(den)
 
 
@@ -82,7 +84,8 @@ def _cosine_similarity_matrix(A, B, axis=1):
     dot_product = np.sum(A * B, axis=axis)
     norm_A = np.linalg.norm(A, axis=axis)
     norm_B = np.linalg.norm(B, axis=axis)
-    return dot_product / (norm_A * norm_B)
+    den = (norm_A * norm_B)
+    return np.where(den == 0, 0.0, dot_product / np.where(den == 0, 1.0, den))
 
 
 # ── Spectral / trend losses (require torch lazily) ────────────────────────────
@@ -221,10 +224,12 @@ def _trend_loss(targets, outputs, alpha=0.5, device="cpu"):
     _xt2 = x2.squeeze()
     if len(_xt1.shape) == 1:
         _xt1 = torch.reshape(_xt1, (1, _xt1.shape[0]))
-    _xt1 = _xt1.T
-    _xt2 = _xt2.T
-    xc1 = (_xt1 - _xt1.mean(dim=0)).T
-    xc2 = (_xt2 - _xt2.mean(dim=0)).T
+    if len(_xt2.shape) == 1:
+        _xt2 = torch.reshape(_xt2, (1, _xt2.shape[0]))
+    _xt1 = _xt1.mT
+    _xt2 = _xt2.mT
+    xc1 = (_xt1 - _xt1.mean(dim=0)).mT
+    xc2 = (_xt2 - _xt2.mean(dim=0)).mT
     p_corr = torch.nn.functional.cosine_similarity(xc1, xc2, dim=-1)
     w_corr = 1 - p_corr
     dd = torch.norm(targets - outputs, dim=-1)

@@ -15,6 +15,8 @@ import yaml
 import numpy as np
 import pandas as pd
 
+from . import cache as _cache
+from . import parallel as _parallel
 from .dataquality import (
     _df_dt_stats,
     _df_nan_stats,
@@ -42,7 +44,7 @@ def _tsfm_data_quality_filter(
         data_col.extend(dataset_config_dictionary["operation_on_column"])
 
     df = df_dataframe[data_col].copy()
-    df[timestamp_col] = pd.to_datetime(df[timestamp_col])
+    df[timestamp_col] = pd.to_datetime(df[timestamp_col], format="mixed")
     for col in data_col:
         if col != timestamp_col:
             df[col] = df[col].astype(float)
@@ -63,7 +65,7 @@ def _tsfm_data_quality_filter(
             frequency_minutes = _freq_token_to_minutes[freq_str]
 
     if frequency_minutes is None:
-        timestamps = pd.to_datetime(df[timestamp_col])
+        timestamps = pd.to_datetime(df[timestamp_col], format="mixed", utc=True)
         time_diffs = timestamps.diff().dropna()
         frequency_minutes = float(time_diffs.dt.total_seconds().div(60).median())
 
@@ -224,6 +226,7 @@ def _get_ttm_hf_inference(
     scaling=False,
     tsp=None,
     forecast_horizon=-1,
+    metrics=None,
 ):
     from tsfm_public import TinyTimeMixerForPrediction
     from tsfm_public.toolkit.time_series_preprocessor import (
@@ -232,6 +235,13 @@ def _get_ttm_hf_inference(
         create_timestamps,
     )
     from transformers import Trainer, TrainingArguments
+
+    from .profiling import RequestMetrics, stage_timer
+
+    # If no metrics collector was passed, create a throwaway one so the
+    # stage_timer calls still work without branching everywhere.
+    if metrics is None:
+        metrics = RequestMetrics(tool="_get_ttm_hf_inference")
 
     if forecast_horizon == -1:
         forecast_horizon = model_config["prediction_length"]
@@ -252,41 +262,62 @@ def _get_ttm_hf_inference(
     ):
         column_specifiers["id_columns"] = dataset_config_dictionary["id_columns"]
 
-    encode_categorical = False
-    tsp = TimeSeriesPreprocessor(
-        **column_specifiers,
-        scaling=scaling,
-        encode_categorical=encode_categorical,
-        prediction_length=forecast_horizon,
-        context_length=context_length,
-    )
-    dataset_dic = get_datasets(
-        tsp,
-        df_dataframe,
-        split_config={"train": 1.0, "test": 0.0},
-        use_frequency_token=True,
-    )
-    dataset_inference = dataset_dic[0]
+    # ── Stage: preprocessing ──────────────────────────────────────────────
+    with stage_timer("preprocessing", metrics):
+        encode_categorical = False
 
-    model = TinyTimeMixerForPrediction.from_pretrained(
-        model_checkpoint, prediction_filter_length=forecast_horizon
-    )
-    args = TrainingArguments(output_dir="./output", logging_dir="./log")
-    trainer = Trainer(model=model, args=args, eval_dataset=dataset_inference)
-
-    ix_target_features = list(
-        np.arange(len(dataset_config_dictionary["column_specifiers"]["target_columns"]))
-    )
-
-    outputs = trainer.predict(dataset_inference)
-    y_pred = outputs.predictions[0][:, :forecast_horizon, ix_target_features]
-
-    if tsp.scaling:
-        for ixf in range(y_pred.shape[1]):
-            y_pred[:, ixf, :] = tsp.target_scaler_dict["0"].inverse_transform(
-                y_pred[:, ixf, :]
+        prep_key = _cache.make_key(
+            _parallel.mode_tag(), "prep_inference",
+            _cache.df_fingerprint(df_dataframe),
+            column_specifiers, scaling, encode_categorical,
+            forecast_horizon, context_length,
+        )
+        cached_prep = _cache.get(prep_key)
+        if cached_prep is not None:
+            tsp, dataset_inference = cached_prep
+            metrics.metadata["prep_cache_hit"] = True
+        else:
+            metrics.metadata["prep_cache_hit"] = False
+            tsp = TimeSeriesPreprocessor(
+                **column_specifiers,
+                scaling=scaling,
+                encode_categorical=encode_categorical,
+                prediction_length=forecast_horizon,
+                context_length=context_length,
             )
+            dataset_dic = get_datasets(
+                tsp,
+                df_dataframe,
+                split_config={"train": 1.0, "test": 0.0},
+                use_frequency_token=True,
+            )
+            dataset_inference = dataset_dic[0]
+            _cache.put(prep_key, (tsp, dataset_inference))
 
+    # ── Stage: model_loading ──────────────────────────────────────────────
+    with stage_timer("model_loading", metrics):
+        model = TinyTimeMixerForPrediction.from_pretrained(
+            model_checkpoint, prediction_filter_length=forecast_horizon
+        )
+        args = TrainingArguments(output_dir="./output", logging_dir="./log", report_to="none") # report_to var set to avoid wandb login conflict w harness
+        trainer = Trainer(model=model, args=args, eval_dataset=dataset_inference)
+
+    # ── Stage: inference ──────────────────────────────────────────────────
+    with stage_timer("inference", metrics):
+        ix_target_features = list(
+            np.arange(len(dataset_config_dictionary["column_specifiers"]["target_columns"]))
+        )
+
+        outputs = trainer.predict(dataset_inference)
+        y_pred = outputs.predictions[0][:, :forecast_horizon, ix_target_features]
+
+        if tsp.scaling:
+            for ixf in range(y_pred.shape[1]):
+                y_pred[:, ixf, :] = tsp.target_scaler_dict["0"].inverse_transform(
+                    y_pred[:, ixf, :]
+                )
+
+    # ── Post-inference (timestamps, performance) — not a timed stage ─────
     timestamps_list = []
     timestamps_prediction_list = []
     for i in range(len(dataset_inference)):
@@ -336,7 +367,7 @@ _DEFAULT_TRAINING_ARGUMENTS = {
     "learning_rate": 0.0001,
     "num_train_epochs": 10,
     "do_eval": True,
-    "evaluation_strategy": "epoch",
+    "evaluation_strategy": "epoch", 
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
     "save_strategy": "epoch",
@@ -383,6 +414,7 @@ def _finetune_ttm_hf(
     n_test,
     model_checkpoint="",
     training_config_dic=None,
+    metrics=None,
 ):
     from tsfm_public import (
         TinyTimeMixerConfig,
@@ -396,6 +428,11 @@ def _finetune_ttm_hf(
     )
     from tsfm_public.toolkit.util import select_by_index
     from transformers import Trainer, TrainingArguments, EarlyStoppingCallback, set_seed
+
+    from .profiling import RequestMetrics, stage_timer
+
+    if metrics is None:
+        metrics = RequestMetrics(tool="_finetune_ttm_hf")
 
     if training_config_dic is None:
         args_config_dic = _ttm_main_config()
@@ -444,58 +481,62 @@ def _finetune_ttm_hf(
 
     scaling = scaling_type == "standard"
 
-    tsp = TimeSeriesPreprocessor(
-        **column_specifiers,
-        scaling=scaling,
-        encode_categorical=encode_categorical,
-        prediction_length=forecast_horizon,
-        context_length=context_length,
-    )
-    dataset_dic = get_datasets(
-        tsp,
-        df_dataframe,
-        split_config={"train": p_train, "test": p_test},
-        use_frequency_token=True,
-        fewshot_fraction=fewshot_fraction,
-    )
-    train_dataset = dataset_dic[0]
-    valid_dataset = dataset_dic[1]
-    test_dataset = dataset_dic[2]
+    # ── Stage: preprocessing ──────────────────────────────────────────────
+    with stage_timer("preprocessing", metrics):
+        tsp = TimeSeriesPreprocessor(
+            **column_specifiers,
+            scaling=scaling,
+            encode_categorical=encode_categorical,
+            prediction_length=forecast_horizon,
+            context_length=context_length,
+        )
+        dataset_dic = get_datasets(
+            tsp,
+            df_dataframe,
+            split_config={"train": p_train, "test": p_test},
+            use_frequency_token=True,
+            fewshot_fraction=fewshot_fraction,
+        )
+        train_dataset = dataset_dic[0]
+        valid_dataset = dataset_dic[1]
+        test_dataset = dataset_dic[2]
 
     with open(os.path.join(save_model_dir, "args_config.yml"), "w") as outfile:
         yaml.dump(args_config_dic, outfile)
     with open(os.path.join(save_model_dir, "tsp.pickle"), "wb") as _f:
         pickle.dump(tsp, _f)
 
-    if os.path.exists(model_checkpoint):
-        finetune_forecast_model = TinyTimeMixerForPrediction.from_pretrained(
-            model_checkpoint,
-            head_dropout=args_config_dic["head_dropout"],
-            num_input_channels=tsp.num_input_channels,
-            exogenous_channel_indices=tsp.exogenous_channel_indices,
-            prediction_channel_indices=tsp.prediction_channel_indices,
-            decoder_mode=args_config_dic["decoder_mode"],
-            enable_forecast_channel_mixing=False,
-            fcm_use_mixer=False,
-            ignore_mismatched_sizes=True,
-            prediction_filter_length=forecast_horizon,
-        )
-    else:
-        config_ttm_dic = model_config.copy()
-        config_ttm_dic.update(
-            {
-                "head_dropout": args_config_dic["head_dropout"],
-                "prediction_length": forecast_horizon,
-                "num_input_channels": tsp.num_input_channels,
-                "exogenous_channel_indices": tsp.exogenous_channel_indices,
-                "prediction_channel_indices": tsp.prediction_channel_indices,
-                "enable_forecast_channel_mixing": False,
-                "fcm_use_mixer": False,
-                "decoder_mode": args_config_dic["decoder_mode"],
-            }
-        )
-        config = TinyTimeMixerConfig(**config_ttm_dic)
-        finetune_forecast_model = TinyTimeMixerForPrediction(config)
+    # ── Stage: model_loading ──────────────────────────────────────────────
+    with stage_timer("model_loading", metrics):
+        if os.path.exists(model_checkpoint):
+            finetune_forecast_model = TinyTimeMixerForPrediction.from_pretrained(
+                model_checkpoint,
+                head_dropout=args_config_dic["head_dropout"],
+                num_input_channels=tsp.num_input_channels,
+                exogenous_channel_indices=tsp.exogenous_channel_indices,
+                prediction_channel_indices=tsp.prediction_channel_indices,
+                decoder_mode=args_config_dic["decoder_mode"],
+                enable_forecast_channel_mixing=False,
+                fcm_use_mixer=False,
+                ignore_mismatched_sizes=True,
+                prediction_filter_length=forecast_horizon,
+            )
+        else:
+            config_ttm_dic = model_config.copy()
+            config_ttm_dic.update(
+                {
+                    "head_dropout": args_config_dic["head_dropout"],
+                    "prediction_length": forecast_horizon,
+                    "num_input_channels": tsp.num_input_channels,
+                    "exogenous_channel_indices": tsp.exogenous_channel_indices,
+                    "prediction_channel_indices": tsp.prediction_channel_indices,
+                    "enable_forecast_channel_mixing": False,
+                    "fcm_use_mixer": False,
+                    "decoder_mode": args_config_dic["decoder_mode"],
+                }
+            )
+            config = TinyTimeMixerConfig(**config_ttm_dic)
+            finetune_forecast_model = TinyTimeMixerForPrediction(config)
 
     if args_config_dic["backbone_frozen"]:
         for param in finetune_forecast_model.backbone.parameters():
@@ -528,6 +569,7 @@ def _finetune_ttm_hf(
             "output_dir": output_fewshot_dir,
             "logging_dir": logging_dir,
             "dataloader_num_workers": num_workers,
+            "report_to": "none", # report_to var set to avoid wandb login conflict w harness
         }
     )
     if epochs_warmup > 0:
@@ -600,40 +642,47 @@ def _finetune_ttm_hf(
         optimizers=(optimizer, scheduler_object),
     )
 
-    start_time = time.time()
-    if n_finetune > 0:
-        finetune_forecast_trainer.train()
-    train_time = time.time() - start_time
+    # ── Stage: training ──────────────────────────────────────────────────
+    with stage_timer("training", metrics):
+        if n_finetune > 0:
+            finetune_forecast_trainer.train()
 
-    dataset_eval: dict = {}
-    if n_finetune > 0:
-        dataset_eval["train"] = train_dataset
-        dataset_eval["valid"] = valid_dataset
-    if n_test >= 1:
-        dataset_eval["test"] = test_dataset
+    # ── Stage: evaluation ─────────────────────────────────────────────────
+    with stage_timer("evaluation", metrics):
+        dataset_eval: dict = {}
+        if n_finetune > 0:
+            dataset_eval["train"] = train_dataset
+            dataset_eval["valid"] = valid_dataset
+        if n_test >= 1:
+            dataset_eval["test"] = test_dataset
 
-    pd_performance = pd.DataFrame()
-    for dataset_key in dataset_eval:
-        inverse_transforms_eval = []
-        if scaling:
-            inverse_transforms_eval.append(
-                tsp.target_scaler_dict["0"].inverse_transform
+        pd_performance = pd.DataFrame()
+        for dataset_key in dataset_eval:
+            inverse_transforms_eval = []
+            if scaling:
+                inverse_transforms_eval.append(
+                    tsp.target_scaler_dict["0"].inverse_transform
+                )
+            y_gt, y_pred_eval, _ = _get_gt_and_predictions(
+                finetune_forecast_trainer,
+                dataset_eval[dataset_key],
+                ix_target_features=ix_target_features,
+                inverse_transforms=inverse_transforms_eval,
             )
-        y_gt, y_pred_eval, _ = _get_gt_and_predictions(
-            finetune_forecast_trainer,
-            dataset_eval[dataset_key],
-            ix_target_features=ix_target_features,
-            inverse_transforms=inverse_transforms_eval,
-        )
-        target_columns = dataset_config_dictionary["column_specifiers"][
-            "target_columns"
-        ]
-        pd_performance_i = _get_performance(
-            y_gt, y_pred_eval, target_columns=target_columns, prediction=False
-        )
-        pd_performance_i["split"] = dataset_key
-        pd_performance = pd.concat([pd_performance, pd_performance_i], axis=0)
+            target_columns = dataset_config_dictionary["column_specifiers"][
+                "target_columns"
+            ]
+            pd_performance_i = _get_performance(
+                y_gt, y_pred_eval, target_columns=target_columns, prediction=False
+            )
+            pd_performance_i["split"] = dataset_key
+            pd_performance = pd.concat([pd_performance, pd_performance_i], axis=0)
 
+    # Preserve train_time in output for backward compatibility
+    train_stage = next(
+        (s for s in metrics.stages if s.stage_name == "training"), None
+    )
+    train_time = train_stage.wall_clock_ms / 1000 if train_stage else 0.0
     pd_performance["train_time"] = train_time
     return {
         "performance": pd_performance,
