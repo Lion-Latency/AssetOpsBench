@@ -186,7 +186,7 @@ def extract_performance_metrics(result) -> dict:
     return metrics
 
 
-def make_row(workflow, run_index, result, latency, rss_delta, config):
+def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None):
     report = _emit_metrics._last_report or {}
     stages = report.get("stages", [])
     meta = report.get("metadata", {})
@@ -318,7 +318,7 @@ def bench_integrated_tsad(config, mode):
     return rows
 
 
-def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
+def log_to_wandb(workflow, rows, summary, run_tag="baseline", mode=None):
     run = wandb.init(
         entity=WANDB_ENTITY,
         project=WANDB_PROJECT,
@@ -419,7 +419,7 @@ def main():
         for workflow, bench_fn in BENCHMARKS.items():
             print(f"--- {workflow.upper()} [{mode}] ---")
             try:
-                rows = bench_fn(config)
+                rows = bench_fn(config, mode)
             except Exception as e:
                 print(f"  SKIPPED ({e})")
                 continue
