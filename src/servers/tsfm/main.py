@@ -8,7 +8,6 @@ Tools:
   get_ai_tasks          – list available AI task types (static, no deps)
   get_tsfm_models       – list available pre-trained model checkpoints (static)
   run_tsfm_forecasting  – zero-shot TTM inference on a dataset
-    run_tsfm_forecasting_chronos – zero-shot Chronos inference on a dataset
   run_tsfm_finetuning   – few-shot finetuning of a TTM model
   run_tsad              – conformal anomaly detection on TSFM forecasts
   run_integrated_tsad   – end-to-end: forecasting + anomaly detection
@@ -35,6 +34,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from . import cache as _cache
 from . import parallel as _parallel
 from .anomaly import _TimeSeriesAnomalyDetectionConformalWrapper
 from .forecasting import (
@@ -1002,7 +1002,7 @@ def run_integrated_tsad(
             with stage_timer(f"data_retrieval_col{col_idx}", metrics):
                 data_df = _read_ts_data(dataset_path, dataset_config_dictionary=col_config)
 
-            with stage_timer("data_quality_filter", sub):
+            with stage_timer("data_quality_filter", metrics):
                 dq_key = _cache.make_key(
                     _parallel.mode_tag(), "dq",
                     _cache.file_fingerprint(dataset_path),
@@ -1011,13 +1011,13 @@ def run_integrated_tsad(
                 cached_dq = _cache.get(dq_key)
                 if cached_dq is not None:
                     output_dq = cached_dq
-                    sub.metadata["dq_cache_hit"] = True
+                    metrics.metadata["dq_cache_hit"] = True
                 else:
                     output_dq = _tsfm_data_quality_filter(
                         data_df, col_config, model_config, task="inference"
                     )
                     _cache.put(dq_key, output_dq)
-                    sub.metadata["dq_cache_hit"] = False
+                    metrics.metadata["dq_cache_hit"] = False
                 data_df_filtered = output_dq["data"]
                 col_config_filtered = output_dq["dataset_config_dictionary"]
 
@@ -1033,7 +1033,7 @@ def run_integrated_tsad(
                     col_config_filtered,
                     model_config,
                     model_checkpoint,
-                    metrics=sub,
+                    metrics=metrics,
                 )
             except Exception as exc:
                 logger.warning("Forecasting failed for column %s: %s", col, exc)
