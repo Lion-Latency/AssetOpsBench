@@ -33,6 +33,8 @@ from src.servers.tsfm.main import (
     run_tsad,
     run_tsfm_finetuning,
     run_tsfm_forecasting,
+    run_tsfm_forecasting_chronos,
+    run_tsfm_finetuning_chronos,
 )
 
 MODES = {
@@ -377,10 +379,43 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline", mode=None):
     print(f"  W&B: {run.url}")
 
 
+def bench_forecasting_chronos(config, mode):
+    rows = []
+    for i in range(1, config["repeats"] + 1):
+        result, latency, rss = timed_run(
+            run_tsfm_forecasting_chronos,
+            dataset_path=FORECAST_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
+            model_checkpoint="amazon/chronos-2",
+            forecast_horizon=config["forecast_horizon"],
+        )
+        rows.append(make_row("forecasting_chronos", i, result, latency, rss, config, mode))
+    return rows
+
+def bench_finetuning_chronos(config, mode):
+    rows = []
+    for i in range(1, config["repeats"] + 1):
+        result, latency, rss = timed_run(
+            run_tsfm_finetuning_chronos,
+            dataset_path=FINETUNE_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
+            model_checkpoint="amazon/chronos-2",
+            forecast_horizon=config["forecast_horizon"],
+        )
+        rows.append(make_row("finetuning_chronos", i, result, latency, rss, config, mode))
+    return rows
+
 BENCHMARKS = {
     "forecasting": bench_forecasting,
     #"finetuning": bench_finetuning,
     "integrated_tsad": bench_integrated_tsad,
+}
+
+BENCHMARKS_CHRONOS = {
+    "forecasting_chronos": bench_forecasting_chronos,
+    "finetuning_chronos": bench_finetuning_chronos,
 }
 
 
@@ -389,8 +424,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--modes", nargs="+", default=["baseline", "cache_only", "combined"],
                         choices=list(MODES.keys()))
+    parser.add_argument("--model", default="ttm", choices=["ttm", "chronos"])
     args = parser.parse_args()
     modes = args.modes
+    benchmarks = BENCHMARKS_CHRONOS if args.model == "chronos" else BENCHMARKS
 
     config = {
         "model_checkpoint": "ttm_96_28",
@@ -416,7 +453,7 @@ def main():
         print("#" * 72)
         print(f"# MODE: {mode}")
         print("#" * 72)
-        for workflow, bench_fn in BENCHMARKS.items():
+        for workflow, bench_fn in benchmarks.items():
             print(f"--- {workflow.upper()} [{mode}] ---")
             try:
                 rows = bench_fn(config, mode)
