@@ -233,88 +233,9 @@ class TestRunTSADValidation:
         assert "error" in data
         assert "target_columns" in data["error"]
 
-class TestRunTSADChronosValidation:
-    @pytest.mark.anyio
-    async def test_empty_dataset_path_returns_error(self):
-        data = await call_tool(
-            mcp, "run_tsad",
-            {
-                "dataset_path": "",
-                "tsfm_output_json": "/tmp/pred.json",
-                "timestamp_column": "ts",
-                "target_columns": ["val"],
-            },
-        )
-        assert "error" in data
-        assert "dataset_path" in data["error"]
-
-    @pytest.mark.anyio
-    async def test_empty_tsfm_output_json_returns_error(self):
-        data = await call_tool(
-            mcp, "run_tsad",
-            {
-                "dataset_path": "/tmp/data.csv",
-                "tsfm_output_json": "",
-                "timestamp_column": "ts",
-                "target_columns": ["val"],
-            },
-        )
-        assert "error" in data
-        assert "tsfm_output_json" in data["error"]
-
-    @pytest.mark.anyio
-    async def test_invalid_task_returns_error(self):
-        data = await call_tool(
-            mcp, "run_tsad",
-            {
-                "dataset_path": "/tmp/data.csv",
-                "tsfm_output_json": "/tmp/pred.json",
-                "timestamp_column": "ts",
-                "target_columns": ["val"],
-                "task": "invalid_task",
-            },
-        )
-        assert "error" in data
-        assert "task" in data["error"]
-
-    @pytest.mark.anyio
-    async def test_empty_target_columns_returns_error(self):
-        data = await call_tool(
-            mcp, "run_tsad",
-            {
-                "dataset_path": "/tmp/data.csv",
-                "tsfm_output_json": "/tmp/pred.json",
-                "timestamp_column": "ts",
-                "target_columns": [],
-            },
-        )
-        assert "error" in data
-        assert "target_columns" in data["error"]
-
-
-
 # ── run_integrated_tsad — input validation ────────────────────────────────────
 
 class TestRunIntegratedTSADValidation:
-    @pytest.mark.anyio
-    async def test_empty_dataset_path_returns_error(self):
-        data = await call_tool(
-            mcp, "run_integrated_tsad",
-            {"dataset_path": "", "timestamp_column": "ts", "target_columns": ["val"]},
-        )
-        assert "error" in data
-        assert "dataset_path" in data["error"]
-
-    @pytest.mark.anyio
-    async def test_empty_target_columns_returns_error(self):
-        data = await call_tool(
-            mcp, "run_integrated_tsad",
-            {"dataset_path": "/tmp/data.csv", "timestamp_column": "ts", "target_columns": []},
-        )
-        assert "error" in data
-        assert "target_columns" in data["error"]
-
-class TestRunIntegratedTSADChronosValidation:
     @pytest.mark.anyio
     async def test_empty_dataset_path_returns_error(self):
         data = await call_tool(
