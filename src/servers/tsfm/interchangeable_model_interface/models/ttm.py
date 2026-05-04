@@ -8,6 +8,7 @@ import pandas as pd
 
 from ..interchangeable_model_interface import InterchangeableModelInterface
 from ...metrics import _METRICS_FORECAST, _TSFREQUENCY_TOLERANCE, _freq_token_to_minutes
+from io import UnsupportedOperation
 
 class TTM(InterchangeableModelInterface):
 
@@ -525,3 +526,11 @@ class TTM(InterchangeableModelInterface):
             "save_model_dir": save_model_dir,
             "experiment_config_path": os.path.join(save_model_dir, "args_config.yml"),
         }
+
+    # Run anomaly detection.
+    def anomaly_detection(self):
+        raise UnsupportedOperation("Use run_tsad for TTM anomaly detection.")
+
+    # Run integrated anomaly detection (forecasting + anomaly detection in one call).
+    def integrated_anomaly_detection(self):
+        raise UnsupportedOperation("Use run_integrated_tsad for integrated TTM anomaly detection.")

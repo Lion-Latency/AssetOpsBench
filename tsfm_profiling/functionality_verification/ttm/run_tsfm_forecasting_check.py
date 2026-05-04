@@ -11,7 +11,6 @@ repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
 load_dotenv(repo_root / ".env")
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 datasets_dir = os.getenv("PATH_TO_DATASETS_DIR")
 if not datasets_dir:

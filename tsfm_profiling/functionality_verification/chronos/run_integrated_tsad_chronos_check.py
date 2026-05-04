@@ -20,13 +20,14 @@ SOURCE_DATASET_PATH = DATA_DIR / "main_flat.csv"
 TARGET_COLUMN = "Chiller 4 Liquid Refrigerant Evaporator Temperature"
 TIMESTAMP_COLUMN = "timestamp"
 SUBSET_START_ROW = 789000
+FORECAST_HORIZON = 24
 SUBSET_NROWS = 2000
 
-from src.servers.tsfm.main import run_integrated_tsad
+from src.servers.tsfm.interchangeable_model_interface.models.chronos import Chronos
 
-print("\n" + "="*60)
-print("INTEGRATED ANOMALY DETECTION CHECK (Original Model with TTM)")
-print("="*60)
+print("\n" + "="*75)
+print("INTEGRATED ANOMALY DETECTION CHECK (Interchangeable Model with Chronos)")
+print("="*75)
 
 subset_df = pd.read_csv(
     SOURCE_DATASET_PATH,
@@ -39,11 +40,16 @@ subset_df = pd.read_csv(
 subset_dataset_path = Path(tempfile.mkdtemp()) / "dhaval_main_flat_subset.csv"
 subset_df.to_csv(subset_dataset_path, index=False)
 
-result = run_integrated_tsad(
+interchangeable_model = Chronos(
+    model_checkpoint="amazon/chronos-2",
+    context_length=0,
+    prediction_filter_length=FORECAST_HORIZON,
+)
+
+result = interchangeable_model.integrated_anomaly_detection(
     dataset_path=str(subset_dataset_path),
     timestamp_column=TIMESTAMP_COLUMN,
     target_columns=[TARGET_COLUMN],
-    model_checkpoint="ttm_96_28",
     false_alarm=0.05,
     n_calibration=0.2,
 )

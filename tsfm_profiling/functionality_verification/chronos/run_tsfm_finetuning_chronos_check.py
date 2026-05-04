@@ -13,9 +13,6 @@ sys.path.insert(0, str(repo_root))
 
 load_dotenv(repo_root / ".env")
 
-# Runs on CPU to avoid out of memory error on GPU.
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
 datasets_dir = os.getenv("PATH_TO_DATASETS_DIR")
 if not datasets_dir:
     raise RuntimeError("PATH_TO_DATASETS_DIR is not set")

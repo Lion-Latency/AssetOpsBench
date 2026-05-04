@@ -25,3 +25,13 @@ class InterchangeableModelInterface(ABC):
     @abstractmethod
     def finetune(self):
         pass
+
+    # Run anomaly detection.
+    @abstractmethod
+    def anomaly_detection(self):
+        pass
+
+    # Run integrated anomaly detection (forecasting + anomaly detection in one call).
+    @abstractmethod
+    def integrated_anomaly_detection(self):
+        pass

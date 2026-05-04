@@ -1012,10 +1012,22 @@ def run_integrated_tsad(
             tsmodel_pred = inference_data
 
             try:
+                col_config_for_tsad = {**col_config_filtered}
+                if "id_columns" in col_config_for_tsad:
+                    col_config_for_tsad["id_columns"] = [
+                        c for c in col_config_for_tsad["id_columns"] if c != "segment_id"
+                    ]
+                if "id_columns" in col_config_for_tsad.get("column_specifiers", {}):
+                    col_config_for_tsad["column_specifiers"] = {
+                        **col_config_for_tsad["column_specifiers"],
+                        "id_columns": [
+                            c for c in col_config_for_tsad["column_specifiers"]["id_columns"] if c != "segment_id"
+                        ],
+                    }
                 with stage_timer(f"anomaly_detection_col{col_idx}", metrics):
                     tsad_output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
                         dataset_path,
-                        col_config,
+                        col_config_for_tsad,
                         tsmodel_pred,
                         ad_model_checkpoint=None,
                         ad_model_save=ad_model_save,
