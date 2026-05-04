@@ -124,9 +124,9 @@ def _read_ts_data(dataset_path: str, dataset_config_dictionary=None) -> pd.DataF
     if ".csv" in dataset_path:
         if dataset_config_dictionary is not None:
             col_spec = dataset_config_dictionary["column_specifiers"]
-            data_df = pd.read_csv(dataset_path)
-            data_df = _normalize_timestamp_column(
-                data_df, col_spec["timestamp_column"]
+            data_df = pd.read_csv(
+                dataset_path, parse_dates=[col_spec["timestamp_column"]],
+                date_format='ISO8601',
             )
         else:
             data_df = pd.read_csv(dataset_path)

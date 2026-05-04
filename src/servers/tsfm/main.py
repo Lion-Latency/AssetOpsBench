@@ -36,6 +36,8 @@ import pandas as pd
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
+from . import cache as _cache
+from . import parallel as _parallel
 from .anomaly import _TimeSeriesAnomalyDetectionConformalWrapper
 from .forecasting import (
     _finetune_ttm_hf,
@@ -224,9 +226,21 @@ def run_tsfm_forecasting(
 
         # ── Stage: data_quality_filter ────────────────────────────────────
         with stage_timer("data_quality_filter", metrics):
-            output_data_quality = _tsfm_data_quality_filter(
-                data_df, dataset_config, model_config, task="inference"
+            dq_key = _cache.make_key(
+                _parallel.mode_tag(), "dq",
+                _cache.file_fingerprint(dataset_path),
+                dataset_config, model_config["context_length"], "inference",
             )
+            cached_dq = _cache.get(dq_key)
+            if cached_dq is not None:
+                output_data_quality = cached_dq
+                metrics.metadata["dq_cache_hit"] = True
+            else:
+                output_data_quality = _tsfm_data_quality_filter(
+                    data_df, dataset_config, model_config, task="inference"
+                )
+                _cache.put(dq_key, output_data_quality)
+                metrics.metadata["dq_cache_hit"] = False
             data_df = output_data_quality["data"]
             dataset_config = output_data_quality["dataset_config_dictionary"]
 
@@ -279,7 +293,8 @@ def run_tsfm_forecasting(
             )
 
     except Exception as exc:
-        logger.error("run_tsfm_forecasting failed: %s", exc)
+        #logger.error("run_tsfm_forecasting failed: %s", exc)
+        logger.exception("run_tsfm_forecasting failed: %s", exc)
         return ErrorResult(error=str(exc))
 
     _emit_metrics(metrics)
@@ -528,9 +543,23 @@ def run_tsfm_finetuning(
 
         # ── Stage: data_quality_filter ────────────────────────────────────
         with stage_timer("data_quality_filter", metrics):
-            output_data_quality = _tsfm_data_quality_filter(
-                data_df, dataset_config, model_config, task="finetuning"
+            dq_key = _cache.make_key(
+                _parallel.mode_tag(), "dq",
+                _cache.file_fingerprint(dataset_path),
+                dataset_config,
+                model_config["context_length"], model_config["prediction_length"],
+                "finetuning",
             )
+            cached_dq = _cache.get(dq_key)
+            if cached_dq is not None:
+                output_data_quality = cached_dq
+                metrics.metadata["dq_cache_hit"] = True
+            else:
+                output_data_quality = _tsfm_data_quality_filter(
+                    data_df, dataset_config, model_config, task="finetuning"
+                )
+                _cache.put(dq_key, output_data_quality)
+                metrics.metadata["dq_cache_hit"] = False
             data_df = output_data_quality["data"]
             dataset_config = output_data_quality["dataset_config_dictionary"]
 
@@ -958,9 +987,10 @@ def run_integrated_tsad(
 
         with open(model_checkpoint + "/config.json") as _f:
             model_config = json.load(_f)
-        df_combined = pd.DataFrame()
 
-        for col_idx, col in enumerate(target_columns):
+        def _process_column(pair):
+            col_idx, col = pair
+            sub = RequestMetrics(tool=f"col{col_idx}")
             col_config = _build_dataset_config(
                 timestamp_column,
                 [col],
@@ -970,14 +1000,25 @@ def run_integrated_tsad(
                 autoregressive_modeling,
             )
 
-            # 1. Load and quality-filter data for this column
-            with stage_timer(f"data_retrieval_col{col_idx}", metrics):
+            with stage_timer("data_retrieval", sub):
                 data_df = _read_ts_data(dataset_path, dataset_config_dictionary=col_config)
 
-            with stage_timer(f"data_quality_filter_col{col_idx}", metrics):
-                output_dq = _tsfm_data_quality_filter(
-                    data_df, col_config, model_config, task="inference"
+            with stage_timer("data_quality_filter", sub):
+                dq_key = _cache.make_key(
+                    _parallel.mode_tag(), "dq",
+                    _cache.file_fingerprint(dataset_path),
+                    col_config, model_config["context_length"], "inference",
                 )
+                cached_dq = _cache.get(dq_key)
+                if cached_dq is not None:
+                    output_dq = cached_dq
+                    sub.metadata["dq_cache_hit"] = True
+                else:
+                    output_dq = _tsfm_data_quality_filter(
+                        data_df, col_config, model_config, task="inference"
+                    )
+                    _cache.put(dq_key, output_dq)
+                    sub.metadata["dq_cache_hit"] = False
                 data_df_filtered = output_dq["data"]
                 col_config_filtered = output_dq["dataset_config_dictionary"]
 
@@ -985,31 +1026,27 @@ def run_integrated_tsad(
                 logger.warning(
                     "Data quality filter removed all data for column %s; skipping.", col
                 )
-                continue
+                return col_idx, None, sub
 
-            # 2. Zero-shot forecasting for this column
-            #    Stages: preprocessing, model_loading, inference are inside
             try:
                 forecast_output = _get_ttm_hf_inference(
                     data_df_filtered,
                     col_config_filtered,
                     model_config,
                     model_checkpoint,
-                    metrics=metrics,
+                    metrics=sub,
                 )
             except Exception as exc:
                 logger.warning("Forecasting failed for column %s: %s", col, exc)
-                continue
+                return col_idx, None, sub
 
-            inference_data = {
+            tsmodel_pred = {
                 "target_prediction": forecast_output["target_prediction"].tolist(),
                 "timestamp": np.array(forecast_output["timestamp_prediction"])
                 .astype(str)
                 .tolist(),
                 "target_columns": forecast_output["target_columns"],
             }
-            # 3. Conformal anomaly detection for this column
-            tsmodel_pred = inference_data
 
             try:
                 col_config_for_tsad = {**col_config_filtered}
@@ -1038,10 +1075,25 @@ def run_integrated_tsad(
                     )
             except Exception as exc:
                 logger.warning("TSAD failed for column %s: %s", col, exc)
-                continue
+                return col_idx, None, sub
 
-            df_col = _tsad_output_to_df(tsad_output)
-            df_combined = pd.concat([df_combined, df_col], axis=0, ignore_index=True)
+            return col_idx, _tsad_output_to_df(tsad_output), sub
+
+        with _parallel.executor() as ex:
+            results = _parallel.map_or_serial(
+                _process_column, list(enumerate(target_columns)), ex
+            )
+
+        # Merge per-column sub-metric stages back into parent with col{i}_ prefix.
+        df_combined = pd.DataFrame()
+        for col_idx, df_col, sub in results:
+            for stage in sub.stages:
+                stage.stage_name = f"{stage.stage_name}_col{col_idx}"
+                metrics.add(stage)
+            for k, v in sub.metadata.items():
+                metrics.metadata[f"col{col_idx}_{k}"] = v
+            if df_col is not None:
+                df_combined = pd.concat([df_combined, df_col], axis=0, ignore_index=True)
 
         if df_combined.empty:
             return ErrorResult(error="No TSAD results produced for any target column.")
