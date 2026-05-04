@@ -19,7 +19,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "requests>=2.32.5",
     "numpy>=1.24",
-    "pandas>=2.0",
+    "pandas>=2.0,<3",
     "pyyaml>=6.0",
     "litellm>=1.0",
     "python-dotenv>=1.0",
@@ -43,7 +43,8 @@ dev = [
     "pytest-anyio>=0.0.0",
 ]
 # Optional heavy ML deps for the TSFM server.
-# tsfm_public must be installed separately: pip install git+https://github.com/ibm-granite/granite-tsfm
+# tsfm_public must be installed separately: pip install granite-tsfm==0.3.1
+# (0.3.2+ pins transformers>=4.56, which conflicts with the 4.45.2 pin below)
 tsfm = [
     "torch>=2.0",
     "transformers==4.45.2",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
-from dotenv import load_dotenv                                                                                                               
+from dotenv import load_dotenv
 import random
 import sys
 import time
@@ -19,8 +19,7 @@ load_dotenv()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-BASE_DIR = REPO_ROOT / "tsfm_profiling" / "functionality_verification"
-DATA_DIR = Path(os.getenv("PATH_TO_DATASETS_DIR")) / "dhaval_data"
+DATA_DIR = Path(os.getenv("PATH_TO_DATASETS_DIR", "/home/shared/tsfm_profiling_data/datasets")) / "dhaval_data"
 MODELS_DIR = REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
 OUTPUT_DIR = REPO_ROOT / "tsfm_profiling" / "harness" / "results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,27 +35,34 @@ from src.servers.tsfm.main import (
     run_tsfm_forecasting,
 )
 
-WANDB_ENTITY = "lion-latency"
-WANDB_PROJECT = "hpml-project"
-
 MODES = {
     "baseline":   {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "0"},
     "cache_only": {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "0"},
     "combined":   {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "1",
                    "TSFM_PREPROCESS_WORKERS": "4",
                    "TSFM_PREPROCESS_EXECUTOR": "thread"},
+    "parallelism_only": {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "1",
+                         "TSFM_PREPROCESS_WORKERS": "4",
+                         "TSFM_PREPROCESS_EXECUTOR": "thread"},
 }
 
-
 def apply_mode(mode: str) -> None:
-    """Set env vars for `mode` and clear the in-memory cache so run 1
-    is a guaranteed cold-start under the new configuration."""
     for k in ("TSFM_CACHE_ENABLED", "TSFM_PREPROCESS_OPT",
               "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR"):
         os.environ.pop(k, None)
     for k, v in MODES[mode].items():
         os.environ[k] = v
     _cache.clear()
+
+
+WANDB_ENTITY = "lion-latency"
+WANDB_PROJECT = "hpml-project"
+
+FORECAST_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
+FINETUNE_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
+TSAD_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
+TIMESTAMP_COLUMN = "timestamp"
+TARGET_COLUMNS = ["Chiller 9 Condenser Water Flow"]
 
 
 def set_seed(seed):
@@ -103,7 +109,84 @@ def timed_run(fn, **kwargs):
     return result, latency, rss_delta
 
 
-def make_row(workflow, run_index, result, latency, rss_delta, config, mode):
+def _sanitize_label(s) -> str:
+    return str(s).replace(" ", "_").replace("/", "_").replace(".", "_")
+
+
+def _flatten_performance(perf) -> dict:
+    out: dict = {}
+    if not isinstance(perf, dict) or not perf:
+        return out
+
+    cols = list(perf.keys())
+    all_subdicts = all(isinstance(perf[c], dict) for c in cols)
+
+    if all_subdicts and "value" in cols:
+        label_cols = [c for c in ("split", "target", "metric") if c in cols]
+        h_col = "forecast" if "forecast" in cols else None
+
+        for ridx in perf["value"].keys():
+            try:
+                val = float(perf["value"][ridx])
+            except (TypeError, ValueError):
+                continue
+
+            parts = [_sanitize_label(perf[c].get(ridx)) for c in label_cols if perf[c].get(ridx) is not None]
+            if h_col is not None and perf[h_col].get(ridx) is not None:
+                parts.append(f"h{perf[h_col][ridx]}")
+
+            key = "perf_" + "_".join(parts) if parts else f"perf_value_{ridx}"
+            out[key] = val
+
+        if "train_time" in cols:
+            for ridx in perf["train_time"]:
+                try:
+                    out["perf_train_time"] = float(perf["train_time"][ridx])
+                    break
+                except (TypeError, ValueError):
+                    continue
+        return out
+
+    for key, val in perf.items():
+        if isinstance(val, dict):
+            for k, v in val.items():
+                try:
+                    out[f"perf_{key}_{k}"] = float(list(v.values())[0]) if isinstance(v, dict) else float(v)
+                except (TypeError, ValueError):
+                    pass
+        else:
+            try:
+                out[f"perf_{key}"] = float(val)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def extract_performance_metrics(result) -> dict:
+    metrics = {}
+    results_file = getattr(result, "results_file", None)
+    if results_file and Path(results_file).exists():
+        try:
+            with open(results_file, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "performance" in data:
+                metrics.update(_flatten_performance(data["performance"]))
+            if isinstance(data, dict) and "anomaly_count" in data:
+                metrics["anomaly_count"] = data["anomaly_count"]
+            if isinstance(data, dict) and "total_records" in data:
+                metrics["total_records"] = data["total_records"]
+        except Exception:
+            pass
+    anomaly_count = getattr(result, "anomaly_count", None)
+    if anomaly_count is not None:
+        metrics["anomaly_count"] = anomaly_count
+    total_records = getattr(result, "total_records", None)
+    if total_records is not None:
+        metrics["total_records"] = total_records
+    return metrics
+
+
+def make_row(workflow, run_index, result, latency, rss_delta, config):
     report = _emit_metrics._last_report or {}
     stages = report.get("stages", [])
     meta = report.get("metadata", {})
@@ -125,6 +208,7 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode):
         "model_checkpoint": config.get("model_checkpoint"),
         "forecast_horizon": config.get("forecast_horizon"),
         "seed": config.get("seed"),
+        "dataset": "real",
     }
 
     for stage in stages:
@@ -133,6 +217,9 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode):
         row[f"stage_{name}_rss_delta_mb"] = stage.get("rss_delta_mb")
         if "gpu_mem_delta_mb" in stage:
             row[f"stage_{name}_gpu_delta_mb"] = stage.get("gpu_mem_delta_mb")
+
+    perf_metrics = extract_performance_metrics(result)
+    row.update(perf_metrics)
 
     return row
 
@@ -158,9 +245,9 @@ def bench_forecasting(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsfm_forecasting,
-            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
-            timestamp_column="timestamp",
-            target_columns=["Chiller 9 Condenser Water Flow"],
+            dataset_path=FORECAST_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
             model_checkpoint=config["model_checkpoint"],
             forecast_horizon=config["forecast_horizon"],
         )
@@ -173,9 +260,9 @@ def bench_finetuning(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsfm_finetuning,
-            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
-            timestamp_column="timestamp",
-            target_columns=["Chiller 9 Condenser Water Flow"],
+            dataset_path=FINETUNE_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
             model_checkpoint=config["model_checkpoint"],
             save_model_dir="tunedmodels",
             forecast_horizon=config["forecast_horizon"],
@@ -189,9 +276,9 @@ def bench_finetuning(config, mode):
 def bench_tsad(config, mode):
     forecast_result, _, _ = timed_run(
         run_tsfm_forecasting,
-        dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
-        timestamp_column="timestamp",
-        target_columns=["Chiller 9 Condenser Water Flow"],
+        dataset_path=FORECAST_DATASET,
+        timestamp_column=TIMESTAMP_COLUMN,
+        target_columns=TARGET_COLUMNS,
         model_checkpoint=config["model_checkpoint"],
         forecast_horizon=config["forecast_horizon"],
     )
@@ -203,10 +290,10 @@ def bench_tsad(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_tsad,
-            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
+            dataset_path=TSAD_DATASET,
             tsfm_output_json=forecast_file,
-            timestamp_column="timestamp",
-            target_columns=["Chiller 9 Condenser Water Flow"],
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
             task="fit",
             false_alarm=0.05,
             n_calibration=0.2,
@@ -220,12 +307,9 @@ def bench_integrated_tsad(config, mode):
     for i in range(1, config["repeats"] + 1):
         result, latency, rss = timed_run(
             run_integrated_tsad,
-            dataset_path=str(DATA_DIR / "main_chiller9_small.csv"),
-            timestamp_column="timestamp",
-            target_columns= ["Chiller 9 Condenser Water Flow",
-                            "Chiller 9 Power Input",         
-                            "Chiller 9 Tonnage",                                                                                                                   
-                            "Chiller 9 Supply Temperature",],
+            dataset_path=TSAD_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
             model_checkpoint=config["model_checkpoint"],
             false_alarm=0.05,
             n_calibration=0.2,
@@ -234,13 +318,11 @@ def bench_integrated_tsad(config, mode):
     return rows
 
 
-def log_to_wandb(workflow, rows, summary, mode):
+def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
     run = wandb.init(
         entity=WANDB_ENTITY,
         project=WANDB_PROJECT,
-        name=f"bench_{workflow}_{mode}_{time.strftime('%Y%m%d_%H%M%S')}",
-        group=mode,
-        tags=[mode, workflow],
+        name=f"bench_{workflow}_{run_tag}_{time.strftime('%Y%m%d_%H%M%S')}",
         config={
             "workflow": workflow,
             "mode": mode,
@@ -249,6 +331,8 @@ def log_to_wandb(workflow, rows, summary, mode):
             "preprocess_workers": os.environ.get("TSFM_PREPROCESS_WORKERS"),
             "model_checkpoint": rows[0]["model_checkpoint"] if rows else None,
             "repeats": len(rows),
+            "dataset": "real",
+            "run_tag": run_tag,
         },
         reinit="finish_previous",
     )
@@ -262,15 +346,16 @@ def log_to_wandb(workflow, rows, summary, mode):
             "run_type": row["run_type"],
         }
 
-        if row.get("end_to_end_ms") is not None:
-            log_dict[f"{workflow}/end_to_end_ms"] = row["end_to_end_ms"]
-        if row.get("stage_total_ms") is not None:
-            log_dict[f"{workflow}/stage_total_ms"] = row["stage_total_ms"]
-        if row.get("overhead_ms") is not None:
-            log_dict[f"{workflow}/overhead_ms"] = row["overhead_ms"]
+        for key in ["end_to_end_ms", "stage_total_ms", "overhead_ms"]:
+            if row.get(key) is not None:
+                log_dict[f"{workflow}/{key}"] = row[key]
 
         for key, val in row.items():
             if key.startswith("stage_") and val is not None:
+                log_dict[f"{workflow}/{key}"] = val
+            if key.startswith("perf_") and val is not None:
+                log_dict[f"{workflow}/{key}"] = val
+            if key in ("anomaly_count", "total_records") and val is not None:
                 log_dict[f"{workflow}/{key}"] = val
 
         run.log(log_dict)
@@ -294,23 +379,25 @@ def log_to_wandb(workflow, rows, summary, mode):
 
 BENCHMARKS = {
     "forecasting": bench_forecasting,
-    "finetuning": bench_finetuning,
-    "tsad": bench_tsad,
+    #"finetuning": bench_finetuning,
     "integrated_tsad": bench_integrated_tsad,
 }
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--modes", nargs="+", default=["baseline", "cache_only", "combined"],
+                        choices=list(MODES.keys()))
+    args = parser.parse_args()
+    modes = args.modes
+
     config = {
         "model_checkpoint": "ttm_96_28",
         "forecast_horizon": 24,
         "seed": 42,
-        "repeats": 5,
+        "repeats": 3,
     }
-
-    modes = os.environ.get("TSFM_BENCH_MODES", "baseline,cache_only,combined").split(",")
-    modes = [m.strip() for m in modes if m.strip() in MODES]
-
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     all_rows = []
 
@@ -318,6 +405,7 @@ def main():
     print("TSFM EXTERNAL BENCHMARKING HARNESS")
     print("=" * 72)
     print(f"Entity: {WANDB_ENTITY} | Project: {WANDB_PROJECT}")
+    print(f"Dataset: real (main_chiller9_small.csv)")
     print(f"Repeats per workflow: {config['repeats']}")
     print(f"Modes: {modes}")
     print()
@@ -326,42 +414,34 @@ def main():
         apply_mode(mode)
         set_seed(config["seed"])
         print("#" * 72)
-        print(f"# MODE: {mode}  (env={MODES[mode]})")
+        print(f"# MODE: {mode}")
         print("#" * 72)
-
         for workflow, bench_fn in BENCHMARKS.items():
-            
             print(f"--- {workflow.upper()} [{mode}] ---")
             try:
-                rows = bench_fn(config, mode)
+                rows = bench_fn(config)
             except Exception as e:
                 print(f"  SKIPPED ({e})")
                 continue
-            
             for r in rows:
                 print(
                     f"  Run {r['run_index']} [{r['run_type']}] "
                     f"status={r['status']} "
                     f"latency={r['latency_sec']:.4f}s "
                     f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
-                    f"overhead={r.get('overhead_ms', 'N/A')}ms "
-                    f"dq_hit={r.get('dq_cache_hit')} prep_hit={r.get('prep_cache_hit')}"
+                    f"overhead={r.get('overhead_ms', 'N/A')}ms"
                 )
                 if r["status"] != "success":
                     print(f"    error: {r['error']}")
-
             summary = summarize(rows)
             print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
             print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
             print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
             print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
-
-            log_to_wandb(workflow, rows, summary, mode)
-
+            log_to_wandb(workflow, rows, summary, run_tag=mode)
             write_json(OUTPUT_DIR / f"{workflow}_{mode}_{timestamp}.json", rows)
             write_csv(OUTPUT_DIR / f"{workflow}_{mode}_{timestamp}.csv", rows)
-            write_json(OUTPUT_DIR / f"{workflow}_summary_{mode}_{timestamp}.json", summary)
-
+            write_json(OUTPUT_DIR / f"{workflow}_{mode}_summary_{timestamp}.json", summary)
             all_rows.extend(rows)
             print()
 
@@ -375,4 +455,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
