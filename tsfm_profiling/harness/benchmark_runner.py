@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
-from dotenv import load_dotenv                                                                                                               
+from dotenv import load_dotenv
 import random
 import sys
 import time
@@ -19,8 +19,7 @@ load_dotenv()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-REAL_DATA_DIR = Path("/home/shared/tsfm_profiling_data/datasets/dhaval_data")
-SYNTHETIC_DATA_DIR = REPO_ROOT / "tsfm_profiling" / "functionality_verification" / "synthetic_data"
+DATA_DIR = Path(os.getenv("PATH_TO_DATASETS_DIR", "/home/shared/tsfm_profiling_data/datasets")) / "dhaval_data"
 MODELS_DIR = REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
 OUTPUT_DIR = REPO_ROOT / "tsfm_profiling" / "harness" / "results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,24 +35,34 @@ from src.servers.tsfm.main import (
     run_tsfm_forecasting,
 )
 
+MODES = {
+    "baseline":   {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "0"},
+    "cache_only": {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "0"},
+    "combined":   {"TSFM_CACHE_ENABLED": "1", "TSFM_PREPROCESS_OPT": "1",
+                   "TSFM_PREPROCESS_WORKERS": "4",
+                   "TSFM_PREPROCESS_EXECUTOR": "thread"},
+    "parallelism_only": {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "1",
+                         "TSFM_PREPROCESS_WORKERS": "4",
+                         "TSFM_PREPROCESS_EXECUTOR": "thread"},
+}
+
+def apply_mode(mode: str) -> None:
+    for k in ("TSFM_CACHE_ENABLED", "TSFM_PREPROCESS_OPT",
+              "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR"):
+        os.environ.pop(k, None)
+    for k, v in MODES[mode].items():
+        os.environ[k] = v
+    _cache.clear()
+
+
 WANDB_ENTITY = "lion-latency"
 WANDB_PROJECT = "hpml-project"
 
-USE_REAL_DATA = True
-if USE_REAL_DATA:
-    DATA_DIR = REAL_DATA_DIR
-    FORECAST_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-    FINETUNE_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-    TSAD_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-    TIMESTAMP_COLUMN = "timestamp"
-    TARGET_COLUMNS = ["Chiller 9 Condenser Water Flow"]
-else:
-    DATA_DIR = SYNTHETIC_DATA_DIR
-    FORECAST_DATASET = str(DATA_DIR / "chiller9_annotated_small_test.csv")
-    FINETUNE_DATASET = str(DATA_DIR / "chiller9_finetuning_small.csv")
-    TSAD_DATASET = str(DATA_DIR / "chiller9_tsad.csv")
-    TIMESTAMP_COLUMN = "timestamp"
-    TARGET_COLUMNS = ["Chiller 9 Condenser Water Flow"]
+FORECAST_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
+FINETUNE_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
+TSAD_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
+TIMESTAMP_COLUMN = "timestamp"
+TARGET_COLUMNS = ["Chiller 9 Condenser Water Flow"]
 
 
 def set_seed(seed):
@@ -159,7 +168,7 @@ def make_row(workflow, run_index, result, latency, rss_delta, config):
         "model_checkpoint": config.get("model_checkpoint"),
         "forecast_horizon": config.get("forecast_horizon"),
         "seed": config.get("seed"),
-        "dataset": "real" if USE_REAL_DATA else "synthetic",
+        "dataset": "real",
     }
 
     for stage in stages:
@@ -282,7 +291,7 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
             "preprocess_workers": os.environ.get("TSFM_PREPROCESS_WORKERS"),
             "model_checkpoint": rows[0]["model_checkpoint"] if rows else None,
             "repeats": len(rows),
-            "dataset": "real" if USE_REAL_DATA else "synthetic",
+            "dataset": "real",
             "run_tag": run_tag,
         },
         reinit="finish_previous",
@@ -329,6 +338,9 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
 
 
 BENCHMARKS = {
+    "forecasting": bench_forecasting,
+    "finetuning": bench_finetuning,
+    "tsad": bench_tsad,
     "integrated_tsad": bench_integrated_tsad,
 }
 
