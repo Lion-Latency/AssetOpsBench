@@ -203,3 +203,4 @@ mcp/servers/tsfm/artifacts/tsfm_models/
 src/tmp/
 wandb/
 tuned_models/
+tsfm_profiling/harness/results

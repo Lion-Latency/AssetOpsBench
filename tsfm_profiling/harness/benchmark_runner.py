@@ -62,13 +62,50 @@ def apply_mode(mode: str) -> None:
 
 
 WANDB_ENTITY = "lion-latency"
-WANDB_PROJECT = "hpml-project"
+WANDB_PROJECT = "hpml-project-final"
 
-FORECAST_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-FINETUNE_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-TSAD_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
 TIMESTAMP_COLUMN = "timestamp"
-TARGET_COLUMNS = ["Chiller 9 Condenser Water Flow"]
+SOURCE_DATASET = DATA_DIR / "main_flat.csv"
+FULL_DATASET = SOURCE_DATASET
+ID_COLUMNS = ["asset_id"]
+EXCLUDED_COLUMNS = {TIMESTAMP_COLUMN, *ID_COLUMNS, "selector"}
+
+
+def _load_target_groups(dataset_path: Path) -> dict[str, list[str]]:
+    header = pd.read_csv(dataset_path, nrows=0)
+    candidate_columns = [
+        column for column in header.columns if column not in EXCLUDED_COLUMNS
+    ]
+
+    asset_ids: set[str] = set()
+    for chunk in pd.read_csv(dataset_path, usecols=ID_COLUMNS, chunksize=200_000, dtype=str):
+        asset_ids.update(chunk[ID_COLUMNS[0]].dropna().unique().tolist())
+
+    target_groups: dict[str, list[str]] = {}
+    for asset_id in sorted(asset_ids):
+        group_columns = [
+            column for column in candidate_columns if column.startswith(f"{asset_id} ")
+        ]
+        if group_columns:
+            target_groups[asset_id] = group_columns
+    return target_groups
+
+
+TARGET_GROUPS = _load_target_groups(FULL_DATASET)
+FORECAST_DATASET = str(FULL_DATASET)
+FINETUNE_DATASET = str(FULL_DATASET)
+TSAD_DATASET = str(FULL_DATASET)
+TARGET_COLUMNS = [
+    column for group_columns in TARGET_GROUPS.values() for column in group_columns
+]
+
+
+def _iter_target_groups(config: dict[str, Any]):
+    for target_group, target_columns in TARGET_GROUPS.items():
+        group_config = dict(config)
+        group_config["target_group"] = target_group
+        group_config["target_count"] = len(target_columns)
+        yield group_config, target_columns
 
 
 def set_seed(seed):
@@ -244,6 +281,8 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
     row = {
         "workflow": workflow,
         "mode": mode,
+        "target_group": config.get("target_group"),
+        "target_count": config.get("target_count"),
         "run_index": run_index,
         "run_type": "cold_start" if run_index == 1 else "steady_state",
         "status": getattr(result, "status", "unknown"),
@@ -277,14 +316,15 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
 def summarize(rows):
     cold = [r for r in rows if r["run_type"] == "cold_start" and r["status"] == "success"]
     steady = [r for r in rows if r["run_type"] == "steady_state" and r["status"] == "success"]
+    cold_end_to_end = [r["end_to_end_ms"] for r in cold if r.get("end_to_end_ms") is not None]
     return {
         "total_runs": len(rows),
         "successful_runs": sum(r["status"] == "success" for r in rows),
         "failed_runs": sum(r["status"] != "success" for r in rows),
-        "cold_start_latency_sec": cold[0]["latency_sec"] if cold else None,
+        "cold_start_latency_sec": mean([r["latency_sec"] for r in cold]) if cold else None,
         "steady_state_avg_latency_sec": mean([r["latency_sec"] for r in steady]) if steady else None,
         "steady_state_avg_rss_delta_mb": mean([r["cpu_rss_delta_mb"] for r in steady]) if steady else None,
-        "cold_start_end_to_end_ms": cold[0].get("end_to_end_ms") if cold else None,
+        "cold_start_end_to_end_ms": mean(cold_end_to_end) if cold_end_to_end else None,
         "steady_state_avg_end_to_end_ms": mean([r["end_to_end_ms"] for r in steady if r.get("end_to_end_ms")]) if steady else None,
         "steady_state_avg_overhead_ms": mean([r["overhead_ms"] for r in steady if r.get("overhead_ms")]) if steady else None,
     }
@@ -292,79 +332,90 @@ def summarize(rows):
 
 def bench_forecasting(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_forecasting,
-            dataset_path=FORECAST_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint=config["model_checkpoint"],
-            forecast_horizon=config["forecast_horizon"],
-        )
-        rows.append(make_row("forecasting", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_forecasting,
+                dataset_path=FORECAST_DATASET,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint=config["model_checkpoint"],
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("forecasting", i, result, latency, rss, group_config, mode))
     return rows
 
 
 def bench_finetuning(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_finetuning,
-            dataset_path=FINETUNE_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint=config["model_checkpoint"],
-            save_model_dir="tunedmodels",
-            forecast_horizon=config["forecast_horizon"],
-            n_finetune=0.05,
-            n_test=0.05,
-        )
-        rows.append(make_row("finetuning", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_finetuning,
+                dataset_path=FINETUNE_DATASET,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint=config["model_checkpoint"],
+                save_model_dir="tunedmodels",
+                forecast_horizon=config["forecast_horizon"],
+                n_finetune=0.05,
+                n_test=0.05,
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("finetuning", i, result, latency, rss, group_config, mode))
     return rows
 
 
 def bench_tsad(config, mode):
-    forecast_result, _, _ = timed_run(
-        run_tsfm_forecasting,
-        dataset_path=FORECAST_DATASET,
-        timestamp_column=TIMESTAMP_COLUMN,
-        target_columns=TARGET_COLUMNS,
-        model_checkpoint=config["model_checkpoint"],
-        forecast_horizon=config["forecast_horizon"],
-    )
-    if getattr(forecast_result, "status", None) != "success":
-        raise RuntimeError(f"Forecasting pre-step failed: {forecast_result}")
-    forecast_file = forecast_result.results_file
-
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsad,
-            dataset_path=TSAD_DATASET,
-            tsfm_output_json=forecast_file,
+    for group_config, target_columns in _iter_target_groups(config):
+        forecast_result, _, _ = timed_run(
+            run_tsfm_forecasting,
+            dataset_path=FORECAST_DATASET,
             timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            task="fit",
-            false_alarm=0.05,
-            n_calibration=0.2,
+            target_columns=target_columns,
+            model_checkpoint=config["model_checkpoint"],
+            forecast_horizon=config["forecast_horizon"],
+            id_columns=ID_COLUMNS,
         )
-        rows.append(make_row("tsad", i, result, latency, rss, config, mode))
+        if getattr(forecast_result, "status", None) != "success":
+            raise RuntimeError(
+                f"Forecasting pre-step failed for {group_config['target_group']}: {forecast_result}"
+            )
+        forecast_file = forecast_result.results_file
+
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsad,
+                dataset_path=TSAD_DATASET,
+                tsfm_output_json=forecast_file,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                task="fit",
+                false_alarm=0.05,
+                n_calibration=0.2,
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("tsad", i, result, latency, rss, group_config, mode))
     return rows
 
 
 def bench_integrated_tsad(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_integrated_tsad,
-            dataset_path=TSAD_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint=config["model_checkpoint"],
-            false_alarm=0.05,
-            n_calibration=0.2,
-        )
-        rows.append(make_row("integrated_tsad", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_integrated_tsad,
+                dataset_path=TSAD_DATASET,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint=config["model_checkpoint"],
+                false_alarm=0.05,
+                n_calibration=0.2,
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("integrated_tsad", i, result, latency, rss, group_config, mode))
     return rows
 
 
@@ -469,30 +520,34 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline", mode=None):
 
 def bench_forecasting_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_forecasting_chronos,
-            dataset_path=FORECAST_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-            forecast_horizon=config["forecast_horizon"],
-        )
-        rows.append(make_row("forecasting_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_forecasting_chronos,
+                dataset_path=FORECAST_DATASET,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("forecasting_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 def bench_finetuning_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_finetuning_chronos,
-            dataset_path=FINETUNE_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-            forecast_horizon=config["forecast_horizon"],
-        )
-        rows.append(make_row("finetuning_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_finetuning_chronos,
+                dataset_path=FINETUNE_DATASET,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("finetuning_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 BENCHMARKS = {
@@ -504,28 +559,49 @@ BENCHMARKS = {
 
 def bench_tsad_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_integrated_tsad_chronos,
-            dataset_path=TSAD_DATASET,
+    for group_config, target_columns in _iter_target_groups(config):
+        forecast_result, _, _ = timed_run(
+            run_tsfm_forecasting_chronos,
+            dataset_path=FORECAST_DATASET,
             timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
+            target_columns=target_columns,
             model_checkpoint="amazon/chronos-2",
+            forecast_horizon=config["forecast_horizon"],
+            id_columns=ID_COLUMNS,
         )
-        rows.append(make_row("tsad_chronos", i, result, latency, rss, config, mode))
+        if getattr(forecast_result, "status", None) != "success":
+            raise RuntimeError(
+                f"Chronos forecasting pre-step failed for {group_config['target_group']}: {forecast_result}"
+            )
+        forecast_file = forecast_result.results_file
+
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsad_chronos,
+                dataset_path=TSAD_DATASET,
+                tsfm_output_json=forecast_file,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                n_calibration=0.2,
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("tsad_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 def bench_integrated_tsad_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_integrated_tsad_chronos,
-            dataset_path=TSAD_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-        )
-        rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_integrated_tsad_chronos,
+                dataset_path=TSAD_DATASET,
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 BENCHMARKS_CHRONOS = {
@@ -542,9 +618,15 @@ def main():
     parser.add_argument("--modes", nargs="+", default=["baseline", "cache_only", "combined"],
                         choices=list(MODES.keys()))
     parser.add_argument("--model", default="ttm", choices=["ttm", "chronos"])
+    parser.add_argument(
+        "--workflows",
+        nargs="+",
+        choices=sorted(set(BENCHMARKS) | set(BENCHMARKS_CHRONOS)),
+    )
     args = parser.parse_args()
     modes = args.modes
     benchmarks = BENCHMARKS_CHRONOS if args.model == "chronos" else BENCHMARKS
+    selected_workflows = set(args.workflows) if args.workflows else None
 
     config = {
         "model_checkpoint": "ttm_96_28",
@@ -559,9 +641,12 @@ def main():
     print("TSFM EXTERNAL BENCHMARKING HARNESS")
     print("=" * 72)
     print(f"Entity: {WANDB_ENTITY} | Project: {WANDB_PROJECT}")
-    print(f"Dataset: real (main_chiller9_small.csv)")
+    print(f"Dataset: real (raw main_flat.csv)")
+    print(f"Target groups: {sorted(TARGET_GROUPS)}")
     print(f"Repeats per workflow: {config['repeats']}")
     print(f"Modes: {modes}")
+    if selected_workflows is not None:
+        print(f"Workflows: {sorted(selected_workflows)}")
     print()
 
     for mode in modes:
@@ -571,6 +656,8 @@ def main():
         print(f"# MODE: {mode}")
         print("#" * 72)
         for workflow, bench_fn in benchmarks.items():
+            if selected_workflows is not None and workflow not in selected_workflows:
+                continue
             print(f"--- {workflow.upper()} [{mode}] ---")
             try:
                 rows = bench_fn(config, mode)
@@ -578,8 +665,9 @@ def main():
                 print(f"  SKIPPED ({e})")
                 continue
             for r in rows:
+                group_label = f"[{r['target_group']}] " if r.get("target_group") else ""
                 print(
-                    f"  Run {r['run_index']} [{r['run_type']}] "
+                    f"  {group_label}Run {r['run_index']} [{r['run_type']}] "
                     f"status={r['status']} "
                     f"latency={r['latency_sec']:.4f}s "
                     f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
