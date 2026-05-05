@@ -35,6 +35,8 @@ from src.servers.tsfm.main import (
     run_tsfm_forecasting,
     run_tsfm_forecasting_chronos,
     run_tsfm_finetuning_chronos,
+    run_tsad_chronos,
+    run_integrated_tsad_chronos,
 )
 
 MODES = {
@@ -413,9 +415,37 @@ BENCHMARKS = {
     "integrated_tsad": bench_integrated_tsad,
 }
 
+def bench_tsad_chronos(config, mode):
+    rows = []
+    for i in range(1, config["repeats"] + 1):
+        result, latency, rss = timed_run(
+            run_integrated_tsad_chronos,
+            dataset_path=TSAD_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
+            model_checkpoint="amazon/chronos-2",
+        )
+        rows.append(make_row("tsad_chronos", i, result, latency, rss, config, mode))
+    return rows
+
+def bench_integrated_tsad_chronos(config, mode):
+    rows = []
+    for i in range(1, config["repeats"] + 1):
+        result, latency, rss = timed_run(
+            run_integrated_tsad_chronos,
+            dataset_path=TSAD_DATASET,
+            timestamp_column=TIMESTAMP_COLUMN,
+            target_columns=TARGET_COLUMNS,
+            model_checkpoint="amazon/chronos-2",
+        )
+        rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, config, mode))
+    return rows
+
 BENCHMARKS_CHRONOS = {
     "forecasting_chronos": bench_forecasting_chronos,
     "finetuning_chronos": bench_finetuning_chronos,
+    "tsad_chronos": bench_tsad_chronos,
+    "integrated_tsad_chronos": bench_integrated_tsad_chronos,
 }
 
 
