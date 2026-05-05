@@ -5,6 +5,7 @@ import json
 import os
 from dotenv import load_dotenv
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from statistics import mean
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import psutil
 import wandb
 
@@ -162,19 +164,63 @@ def _flatten_performance(perf) -> dict:
     return out
 
 
+def _tsad_csv_metrics(path: Path) -> dict:
+    out: dict = {}
+    df = pd.read_csv(path)
+    if df.empty:
+        return out
+
+    if "anomaly_label" in df.columns:
+        out["perf_anomaly_rate"] = float(df["anomaly_label"].astype(float).mean())
+    if "anomaly_score" in df.columns:
+        out["perf_mean_anomaly_score"] = float(df["anomaly_score"].mean())
+        out["perf_max_anomaly_score"] = float(df["anomaly_score"].max())
+
+    has_bounds = {"value", "upper_bound", "lower_bound"}.issubset(df.columns)
+    if has_bounds:
+        within = (df["value"] >= df["lower_bound"]) & (df["value"] <= df["upper_bound"])
+        out["perf_interval_coverage"] = float(within.mean())
+        out["perf_mean_interval_width"] = float((df["upper_bound"] - df["lower_bound"]).mean())
+        y_pred = (df["upper_bound"] + df["lower_bound"]) / 2.0
+        diff = (y_pred - df["value"]).astype(float)
+        out["perf_rmse"] = float(np.sqrt((diff ** 2).mean()))
+        out["perf_mae"] = float(diff.abs().mean())
+        denom = df["value"].astype(float).abs().replace(0, np.nan)
+        mape = (diff.abs() / denom * 100).dropna()
+        if len(mape):
+            out["perf_mape"] = float(mape.mean())
+
+    if "split" in df.columns:
+        test_df = df[df["split"] == "test"]
+        if not test_df.empty:
+            if "anomaly_label" in test_df.columns:
+                out["perf_test_anomaly_rate"] = float(test_df["anomaly_label"].astype(float).mean())
+            if has_bounds:
+                within = (test_df["value"] >= test_df["lower_bound"]) & (
+                    test_df["value"] <= test_df["upper_bound"]
+                )
+                out["perf_test_interval_coverage"] = float(within.mean())
+
+    return out
+
+
 def extract_performance_metrics(result) -> dict:
     metrics = {}
     results_file = getattr(result, "results_file", None)
     if results_file and Path(results_file).exists():
+        suffix = Path(results_file).suffix.lower()
         try:
-            with open(results_file, "r") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and "performance" in data:
-                metrics.update(_flatten_performance(data["performance"]))
-            if isinstance(data, dict) and "anomaly_count" in data:
-                metrics["anomaly_count"] = data["anomaly_count"]
-            if isinstance(data, dict) and "total_records" in data:
-                metrics["total_records"] = data["total_records"]
+            if suffix == ".json":
+                with open(results_file, "r") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and "performance" in data:
+                    metrics.update(_flatten_performance(data["performance"]))
+                if isinstance(data, dict) and "anomaly_count" in data:
+                    metrics["anomaly_count"] = data["anomaly_count"]
+                if isinstance(data, dict) and "total_records" in data:
+                    metrics["total_records"] = data["total_records"]
+            elif suffix == ".csv":
+                metrics.update(_tsad_csv_metrics(Path(results_file)))
         except Exception:
             pass
     anomaly_count = getattr(result, "anomaly_count", None)
@@ -337,6 +383,10 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
         reinit="finish_previous",
     )
 
+    horizon_re = re.compile(r"^perf_(.+)_h(\d+)$")
+    # base -> run_index -> horizon -> value (collected for line_series charts)
+    horizon_series: dict = {}
+
     for row in rows:
         log_dict = {
             f"{workflow}/latency_sec": row["latency_sec"],
@@ -351,14 +401,50 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
                 log_dict[f"{workflow}/{key}"] = row[key]
 
         for key, val in row.items():
-            if key.startswith("stage_") and val is not None:
+            if val is None:
+                continue
+            if key.startswith("stage_"):
                 log_dict[f"{workflow}/{key}"] = val
-            if key.startswith("perf_") and val is not None:
-                log_dict[f"{workflow}/{key}"] = val
-            if key in ("anomaly_count", "total_records") and val is not None:
+            elif key.startswith("perf_"):
+                m = horizon_re.match(key)
+                if m:
+                    base, h = m.group(1), int(m.group(2))
+                    try:
+                        fv = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                    if not np.isfinite(fv):
+                        continue
+                    horizon_series.setdefault(base, {}).setdefault(
+                        row["run_index"], {}
+                    )[h] = fv
+                else:
+                    log_dict[f"{workflow}/{key}"] = val
+            elif key in ("anomaly_count", "total_records"):
                 log_dict[f"{workflow}/{key}"] = val
 
         run.log(log_dict)
+
+    for base, by_run in horizon_series.items():
+        all_h = sorted({h for run_d in by_run.values() for h in run_d})
+        keys, ys = [], []
+        for run_idx in sorted(by_run):
+            series = [by_run[run_idx].get(h, float("nan")) for h in all_h]
+            if not any(np.isfinite(v) for v in series):
+                continue
+            keys.append(f"run{run_idx}")
+            ys.append(series)
+        if not keys:
+            continue
+        run.log({
+            f"{workflow}/perf_{base}": wandb.plot.line_series(
+                xs=all_h,
+                ys=ys,
+                keys=keys,
+                title=f"{workflow} {base} vs forecast horizon",
+                xname="forecast_horizon",
+            )
+        })
 
     if summary["cold_start_latency_sec"] is not None:
         run.summary[f"{workflow}/cold_start_latency_sec"] = summary["cold_start_latency_sec"]
@@ -379,7 +465,8 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline"):
 
 BENCHMARKS = {
     "forecasting": bench_forecasting,
-    #"finetuning": bench_finetuning,
+    "finetuning": bench_finetuning,
+    "tsad": bench_tsad,
     "integrated_tsad": bench_integrated_tsad,
 }
 
