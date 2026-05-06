@@ -1,4 +1,0 @@
-cpu_rss_delta_mb,dataset,end_to_end_ms,error,forecast_horizon,latency_sec,model_checkpoint,overhead_ms,run_index,run_type,seed,stage_total_ms,status,workflow
-0.546875,real,,Mixed timezones detected. Pass utc=True in to_datetime or tz='UTC' in DatetimeIndex to convert to a common timezone.,24,0.2867162539914716,ttm_96_28,,1,cold_start,42,,unknown,integrated_tsad
-0.03515625,real,,Mixed timezones detected. Pass utc=True in to_datetime or tz='UTC' in DatetimeIndex to convert to a common timezone.,24,0.2886368249892257,ttm_96_28,,2,steady_state,42,,unknown,integrated_tsad
-0.01171875,real,,Mixed timezones detected. Pass utc=True in to_datetime or tz='UTC' in DatetimeIndex to convert to a common timezone.,24,0.2851076600054512,ttm_96_28,,3,steady_state,42,,unknown,integrated_tsad
