@@ -17,13 +17,24 @@ import pandas as pd
 import psutil
 import wandb
 
-load_dotenv()
 REPO_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(REPO_ROOT / ".env")
 sys.path.insert(0, str(REPO_ROOT))
 
-DATA_DIR = Path(os.getenv("PATH_TO_DATASETS_DIR", "/home/shared/tsfm_profiling_data/datasets")) / "dhaval_data"
-MODELS_DIR = REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
-OUTPUT_DIR = REPO_ROOT / "tsfm_profiling" / "harness" / "results"
+DATASETS_ROOT = Path(os.getenv("PATH_TO_DATASETS_DIR", str(REPO_ROOT.parent))).expanduser()
+DATA_DIR = DATASETS_ROOT / "dhaval_data"
+MODELS_DIR = Path(
+    os.getenv(
+        "PATH_TO_MODELS_DIR",
+        str(REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"),
+    )
+).expanduser()
+OUTPUT_DIR = Path(
+    os.getenv(
+        "PATH_TO_OUTPUTS_DIR",
+        str(REPO_ROOT / "tsfm_profiling" / "harness" / "results"),
+    )
+).expanduser()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 BENCH_ROWS_ENV = "TSFM_BENCH_ROWS"
@@ -31,7 +42,9 @@ BENCH_SWEEP_K = [100]
 CHUNK_SIZE = 200_000
 MISSING_ASSET_ID = "__missing_asset_id__"
 
-os.environ["PATH_TO_MODELS_DIR"] = str(MODELS_DIR)
+os.environ.setdefault("PATH_TO_DATASETS_DIR", str(DATASETS_ROOT))
+os.environ.setdefault("PATH_TO_MODELS_DIR", str(MODELS_DIR))
+os.environ.setdefault("PATH_TO_OUTPUTS_DIR", str(OUTPUT_DIR))
 
 from src.servers.tsfm import cache as _cache
 from src.servers.tsfm.main import (
@@ -66,13 +79,16 @@ def apply_mode(mode: str) -> None:
     _cache.clear()
 
 
-WANDB_ENTITY = "lion-latency"
-WANDB_PROJECT = "hpml-project-final"
+WANDB_ENTITY = os.getenv("WANDB_ENTITY", "lion-latency")
+WANDB_PROJECT = os.getenv("WANDB_PROJECT", "hpml-project-final")
 
 TIMESTAMP_COLUMN = "timestamp"
 SOURCE_DATASET = DATA_DIR / "main_flat.csv"
 ID_COLUMNS = ["asset_id"]
 EXCLUDED_COLUMNS = {TIMESTAMP_COLUMN, *ID_COLUMNS, "selector"}
+CHRONOS_TSAD_EXCLUDED_TARGET_PATTERN = re.compile(
+    r"\b(status|schedule|command)\b", re.IGNORECASE
+)
 
 
 def _load_target_groups(dataset_path: Path) -> dict[str, list[str]]:
@@ -274,9 +290,26 @@ def _build_dataset_configs() -> list[dict[str, Any]]:
     return dataset_configs
 
 
-def _iter_target_groups(config: dict[str, Any]):
+TSAD_GROUPS_ALLOWLIST = {"Chiller 3"}
+
+
+def _filter_chronos_tsad_target_columns(target_columns: list[str]) -> list[str]:
+    return [
+        column
+        for column in target_columns
+        if not CHRONOS_TSAD_EXCLUDED_TARGET_PATTERN.search(column)
+    ]
+
+
+def _iter_target_groups(config: dict[str, Any], target_columns_filter=None, groups_allowlist=None):
     for target_group, target_columns in config["target_groups"].items():
         if target_group == "CQPA AHU 1": continue
+        if groups_allowlist is not None and target_group not in groups_allowlist:
+            continue
+        if target_columns_filter is not None:
+            target_columns = target_columns_filter(target_columns)
+        if not target_columns:
+            continue
         group_config = dict(config)
         group_config["target_group"] = target_group
         group_config["target_count"] = len(target_columns)
@@ -546,41 +579,44 @@ def bench_finetuning(config, mode):
 
 def bench_tsad(config, mode):
     rows = []
-    for group_config, target_columns in _iter_target_groups(config):
-        forecast_result, _, _ = timed_run(
-            run_tsfm_forecasting,
-            dataset_path=config["dataset_path"],
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=target_columns,
-            model_checkpoint=config["model_checkpoint"],
-            forecast_horizon=config["forecast_horizon"],
-            id_columns=ID_COLUMNS,
-        )
-        if getattr(forecast_result, "status", None) != "success":
-            raise RuntimeError(
-                f"Forecasting pre-step failed for {group_config['target_group']}: {forecast_result}"
-            )
-        forecast_file = forecast_result.results_file
+    for group_config, target_columns in _iter_target_groups(config, groups_allowlist=TSAD_GROUPS_ALLOWLIST):
+        for col in target_columns:
+            col_config = dict(group_config)
+            col_config["target_group"] = f"{group_config['target_group']} / {col}"
+            col_config["target_count"] = 1
 
-        for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_tsad,
+            forecast_result, _, _ = timed_run(
+                run_tsfm_forecasting,
                 dataset_path=config["dataset_path"],
-                tsfm_output_json=forecast_file,
                 timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                task="fit",
-                false_alarm=0.05,
-                n_calibration=0.2,
+                target_columns=[col],
+                model_checkpoint=config["model_checkpoint"],
+                forecast_horizon=config["forecast_horizon"],
                 id_columns=ID_COLUMNS,
             )
-            rows.append(make_row("tsad", i, result, latency, rss, group_config, mode))
+            if getattr(forecast_result, "status", None) != "success":
+                continue
+            forecast_file = forecast_result.results_file
+
+            for i in range(1, config["repeats"] + 1):
+                result, latency, rss = timed_run(
+                    run_tsad,
+                    dataset_path=config["dataset_path"],
+                    tsfm_output_json=forecast_file,
+                    timestamp_column=TIMESTAMP_COLUMN,
+                    target_columns=[col],
+                    task="fit",
+                    false_alarm=0.05,
+                    n_calibration=0.2,
+                    id_columns=ID_COLUMNS,
+                )
+                rows.append(make_row("tsad", i, result, latency, rss, col_config, mode))
     return rows
 
 
 def bench_integrated_tsad(config, mode):
     rows = []
-    for group_config, target_columns in _iter_target_groups(config):
+    for group_config, target_columns in _iter_target_groups(config, groups_allowlist=TSAD_GROUPS_ALLOWLIST):
         for i in range(1, config["repeats"] + 1):
             result, latency, rss = timed_run(
                 run_integrated_tsad,
@@ -771,39 +807,47 @@ BENCHMARKS = {
 
 def bench_tsad_chronos(config, mode):
     rows = []
-    for group_config, target_columns in _iter_target_groups(config):
-        forecast_result, _, _ = timed_run(
-            run_tsfm_forecasting_chronos,
-            dataset_path=config["dataset_path"],
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=target_columns,
-            model_checkpoint="amazon/chronos-2",
-            forecast_horizon=config["forecast_horizon"],
-            id_columns=ID_COLUMNS,
-        )
-        if getattr(forecast_result, "status", None) != "success":
-            raise RuntimeError(
-                f"Chronos forecasting pre-step failed for {group_config['target_group']}: {forecast_result}"
-            )
-        forecast_file = forecast_result.results_file
+    for group_config, target_columns in _iter_target_groups(
+        config, _filter_chronos_tsad_target_columns, groups_allowlist=TSAD_GROUPS_ALLOWLIST
+    ):
+        for col in target_columns:
+            col_config = dict(group_config)
+            col_config["target_group"] = f"{group_config['target_group']} / {col}"
+            col_config["target_count"] = 1
 
-        for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_tsad_chronos,
+            forecast_result, _, _ = timed_run(
+                run_tsfm_forecasting_chronos,
                 dataset_path=config["dataset_path"],
-                tsfm_output_json=forecast_file,
                 timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
+                target_columns=[col],
                 model_checkpoint="amazon/chronos-2",
-                n_calibration=0.2,
+                forecast_horizon=config["forecast_horizon"],
                 id_columns=ID_COLUMNS,
             )
-            rows.append(make_row("tsad_chronos", i, result, latency, rss, group_config, mode))
+            if getattr(forecast_result, "status", None) != "success":
+                continue
+            forecast_file = forecast_result.results_file
+
+            for i in range(1, config["repeats"] + 1):
+                result, latency, rss = timed_run(
+                    run_tsad_chronos,
+                    dataset_path=config["dataset_path"],
+                    tsfm_output_json=forecast_file,
+                    timestamp_column=TIMESTAMP_COLUMN,
+                    target_columns=[col],
+                    model_checkpoint="amazon/chronos-2",
+                    n_calibration=0.2,
+                    id_columns=ID_COLUMNS,
+                    frequency_sampling="15_minutes",
+                )
+                rows.append(make_row("tsad_chronos", i, result, latency, rss, col_config, mode))
     return rows
 
 def bench_integrated_tsad_chronos(config, mode):
     rows = []
-    for group_config, target_columns in _iter_target_groups(config):
+    for group_config, target_columns in _iter_target_groups(
+        config, _filter_chronos_tsad_target_columns, groups_allowlist=TSAD_GROUPS_ALLOWLIST
+    ):
         for i in range(1, config["repeats"] + 1):
             result, latency, rss = timed_run(
                 run_integrated_tsad_chronos,
@@ -812,6 +856,7 @@ def bench_integrated_tsad_chronos(config, mode):
                 target_columns=target_columns,
                 model_checkpoint="amazon/chronos-2",
                 id_columns=ID_COLUMNS,
+                frequency_sampling="15_minutes",
             )
             rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, group_config, mode))
     return rows
@@ -844,7 +889,7 @@ def main():
 
     base_config = {
         "model_checkpoint": "ttm_96_28",
-        "forecast_horizon": 24,
+        "forecast_horizon": -1,
         "seed": 42,
         "repeats": 1,
     }

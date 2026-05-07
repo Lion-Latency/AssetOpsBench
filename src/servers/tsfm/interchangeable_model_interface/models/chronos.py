@@ -173,6 +173,8 @@ class Chronos(InterchangeableModelInterface):
         conditional_columns = column_specifiers.get("conditional_columns", [])
         id_columns = column_specifiers.get("id_columns") or []
         id_column = id_columns[0] if id_columns else "item_id"
+        series_id_column = "__chronos_finetune_series_id"
+        target_value_column = "__chronos_target_value"
 
         finetune_df = df_dataframe.copy()
         if id_column not in finetune_df.columns:
@@ -194,13 +196,44 @@ class Chronos(InterchangeableModelInterface):
                 finetune_df[target_column], errors="coerce"
             )
 
-        finetune_df = finetune_df.dropna(subset=target_columns + conditional_columns)
-        finetune_df = finetune_df.sort_values([id_column, timestamp_column]).reset_index(
-            drop=True
-        )
+        # Expand sparse wide target columns into one series per target so sparse
+        # asset datasets can still be fine-tuned without requiring dense rows.
+        series_frames = []
+        for target_column in target_columns:
+            series_df = finetune_df[
+                [id_column, timestamp_column, target_column] + conditional_columns
+            ].copy()
+            series_df = series_df.dropna(subset=[target_column] + conditional_columns)
+            if series_df.empty:
+                continue
+
+            series_df = series_df.rename(columns={target_column: target_value_column})
+            series_df[series_id_column] = (
+                series_df[id_column].astype("string").fillna("0")
+                + "::"
+                + target_column
+            )
+            series_frames.append(series_df)
+
+        if series_frames:
+            finetune_df = pd.concat(series_frames, ignore_index=True)
+            finetune_df = finetune_df.sort_values(
+                [series_id_column, timestamp_column]
+            ).reset_index(drop=True)
+        else:
+            finetune_df = pd.DataFrame(
+                columns=[
+                    series_id_column,
+                    timestamp_column,
+                    target_value_column,
+                    *conditional_columns,
+                ]
+            )
 
         if len(finetune_df) > 0:
-            max_series_length = int(finetune_df.groupby(id_column, sort=False).size().max())
+            max_series_length = int(
+                finetune_df.groupby(series_id_column, sort=False).size().max()
+            )
             max_supported_context = max(
                 forecast_horizon, max_series_length - forecast_horizon
             )
@@ -223,7 +256,7 @@ class Chronos(InterchangeableModelInterface):
             train_inputs = []
             validation_inputs = []
 
-            for _, series_df in finetune_df.groupby(id_column, sort=False):
+            for _, series_df in finetune_df.groupby(series_id_column, sort=False):
                 if len(series_df) < min_series_length:
                     continue
 
@@ -242,11 +275,9 @@ class Chronos(InterchangeableModelInterface):
 
                 train_start = train_stop - n_finetune_series
                 train_series_df = series_df.iloc[train_start:train_stop]
-                train_target_values = train_series_df[target_columns].to_numpy(
+                train_target_values = train_series_df[target_value_column].to_numpy(
                     dtype=np.float32, copy=True
-                ).T
-                if train_target_values.shape[0] == 1:
-                    train_target_values = train_target_values[0]
+                )
 
                 train_series_input = {"target": train_target_values}
                 if conditional_columns:
@@ -259,10 +290,8 @@ class Chronos(InterchangeableModelInterface):
                 validation_series_df = series_df.iloc[train_stop:]
                 if len(validation_series_df) >= min_series_length:
                     validation_target_values = validation_series_df[
-                        target_columns
-                    ].to_numpy(dtype=np.float32, copy=True).T
-                    if validation_target_values.shape[0] == 1:
-                        validation_target_values = validation_target_values[0]
+                        target_value_column
+                    ].to_numpy(dtype=np.float32, copy=True)
 
                     validation_series_input = {"target": validation_target_values}
                     if conditional_columns:
