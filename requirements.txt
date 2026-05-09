@@ -1,0 +1,27 @@
+couchdb3>=2.0.2
+fastmcp>=2.14.5
+mcp[cli]>=1.26.0
+pendulum>=3.2.0
+pydantic>=2.12.5
+requests>=2.32.5
+numpy==1.26.4
+pandas>=2.0,<3
+pyyaml>=6.0
+litellm>=1.0
+python-dotenv>=1.0
+scipy>=1.10.0
+
+# TSFM / ML dependencies
+torch>=2.0
+transformers==4.45.2
+chronos-forecasting
+
+# Benchmarking / evaluation
+wandb
+psutil
+scikit-learn
+
+# Development / testing
+pytest>=9.0.2
+anyio>=4.9.0
+pytest-anyio>=0.0.0
