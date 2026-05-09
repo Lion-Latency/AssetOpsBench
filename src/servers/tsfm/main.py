@@ -75,6 +75,9 @@ logger = logging.getLogger("tsfm-mcp-server")
 from .profiling import RequestMetrics, stage_timer
 
 
+_CHRONOS_DEFAULT_FORECAST_HORIZON = 512
+
+
 def _emit_metrics(metrics: RequestMetrics) -> None:
     """Log the finalized metrics report.
 
@@ -182,7 +185,7 @@ def run_tsfm_forecasting(
         timestamp_column: Name of the timestamp column.
         target_columns: Columns to forecast.
         model_checkpoint: Model name (e.g. ttm_96_28) or absolute checkpoint path.
-        forecast_horizon: Number of steps to forecast; -1 uses the model default.
+        forecast_horizon: Number of steps to forecast; -1 uses the Chronos default of 512.
         conditional_columns: Exogenous / conditional feature columns.
         id_columns: ID columns for multi-entity grouped time series.
         frequency_sampling: Sampling frequency string (e.g. '15_minutes') or
@@ -396,15 +399,22 @@ def run_tsfm_forecasting_chronos(
         prediction_filter_length = forecast_horizon if forecast_horizon != -1 else 1
         interchangeable_model = Chronos(
             model_checkpoint=resolved_model_checkpoint,
-            context_length=0,
+            context_length=8192,
             prediction_filter_length=prediction_filter_length,
         )
 
         with stage_timer("model_loading", metrics):
             interchangeable_model.load_model(resolved_model_checkpoint)
             if forecast_horizon == -1:
-                interchangeable_model.prediction_filter_length = (
-                    interchangeable_model.model.model_prediction_length
+                interchangeable_model.prediction_filter_length = min(
+                    _CHRONOS_DEFAULT_FORECAST_HORIZON,
+                    int(
+                        getattr(
+                            interchangeable_model.model,
+                            "model_prediction_length",
+                            _CHRONOS_DEFAULT_FORECAST_HORIZON,
+                        )
+                    ),
                 )
 
         chronos_model_config = {
@@ -494,7 +504,7 @@ def run_tsfm_finetuning(
         target_columns: Columns to forecast and fine-tune on.
         model_checkpoint: Base model to start from (e.g. ttm_96_28).
         save_model_dir: Directory to save the fine-tuned model checkpoint.
-        forecast_horizon: Steps to forecast; -1 uses the model default.
+        forecast_horizon: Steps to forecast; -1 uses the Chronos default of 512.
         n_finetune: Fraction (≤1) or count (>1) of samples for fine-tuning.
         n_calibration: Fraction or count for calibration set (default 0).
         n_test: Fraction or count for test evaluation (default 0.05).
@@ -731,7 +741,7 @@ def run_tsfm_finetuning_chronos(
         prediction_filter_length = forecast_horizon if forecast_horizon != -1 else 1
         interchangeable_model = Chronos(
             model_checkpoint=resolved_model_checkpoint,
-            context_length=0,
+            context_length=8192,
             prediction_filter_length=prediction_filter_length,
         )
 
@@ -739,8 +749,15 @@ def run_tsfm_finetuning_chronos(
         with stage_timer("model_loading", metrics):
             interchangeable_model.load_model(resolved_model_checkpoint)
         if forecast_horizon == -1:
-            interchangeable_model.prediction_filter_length = (
-                interchangeable_model.model.model_prediction_length
+            interchangeable_model.prediction_filter_length = min(
+                _CHRONOS_DEFAULT_FORECAST_HORIZON,
+                int(
+                    getattr(
+                        interchangeable_model.model,
+                        "model_prediction_length",
+                        _CHRONOS_DEFAULT_FORECAST_HORIZON,
+                    )
+                ),
             )
         if not interchangeable_model.context_length:
             interchangeable_model.context_length = getattr(
@@ -976,7 +993,7 @@ def run_tsad_chronos(
     try:
         interchangeable_model = Chronos(
             model_checkpoint=resolved_model_checkpoint,
-            context_length=0,
+            context_length=8192,
             prediction_filter_length=1,
         )
         result = interchangeable_model.anomaly_detection(
@@ -1258,7 +1275,7 @@ def run_integrated_tsad_chronos(
     try:
         interchangeable_model = Chronos(
             model_checkpoint=resolved_model_checkpoint,
-            context_length=0,
+            context_length=8192,
             prediction_filter_length=1,
         )
         result = interchangeable_model.integrated_anomaly_detection(

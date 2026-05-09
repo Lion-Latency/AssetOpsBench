@@ -1,4 +1,0 @@
-anomaly_count,cpu_rss_delta_mb,dataset,end_to_end_ms,error,forecast_horizon,latency_sec,model_checkpoint,overhead_ms,run_index,run_type,seed,stage_anomaly_detection_gpu_delta_mb,stage_anomaly_detection_ms,stage_anomaly_detection_rss_delta_mb,stage_data_retrieval_gpu_delta_mb,stage_data_retrieval_ms,stage_data_retrieval_rss_delta_mb,stage_serialization_gpu_delta_mb,stage_serialization_ms,stage_serialization_rss_delta_mb,stage_total_ms,status,total_records,workflow
-497,31.125,real,25495.634,,24,25.516824880993227,ttm_96_28,2.934,1,cold_start,42,0.0,25227.149,6.24,0.0,186.754,32.77,0.0,78.797,0.01,25492.699,success,10106,tsad
-497,3.9375,real,25133.236,,24,25.153993020998314,ttm_96_28,3.066,2,steady_state,42,0.0,24881.652,6.37,0.0,170.226,1.51,0.0,78.291,0.01,25130.169,success,10106,tsad
-497,3.96875,real,25469.374,,24,25.490423830982763,ttm_96_28,2.81,3,steady_state,42,0.0,25218.525,3.95,0.0,170.364,0.0,0.0,77.675,0.02,25466.564,success,10106,tsad

@@ -173,6 +173,8 @@ class Chronos(InterchangeableModelInterface):
         conditional_columns = column_specifiers.get("conditional_columns", [])
         id_columns = column_specifiers.get("id_columns") or []
         id_column = id_columns[0] if id_columns else "item_id"
+        series_id_column = "__chronos_finetune_series_id"
+        target_value_column = "__chronos_target_value"
 
         finetune_df = df_dataframe.copy()
         if id_column not in finetune_df.columns:
@@ -194,13 +196,44 @@ class Chronos(InterchangeableModelInterface):
                 finetune_df[target_column], errors="coerce"
             )
 
-        finetune_df = finetune_df.dropna(subset=target_columns + conditional_columns)
-        finetune_df = finetune_df.sort_values([id_column, timestamp_column]).reset_index(
-            drop=True
-        )
+        # Expand sparse wide target columns into one series per target so sparse
+        # asset datasets can still be fine-tuned without requiring dense rows.
+        series_frames = []
+        for target_column in target_columns:
+            series_df = finetune_df[
+                [id_column, timestamp_column, target_column] + conditional_columns
+            ].copy()
+            series_df = series_df.dropna(subset=[target_column] + conditional_columns)
+            if series_df.empty:
+                continue
+
+            series_df = series_df.rename(columns={target_column: target_value_column})
+            series_df[series_id_column] = (
+                series_df[id_column].astype("string").fillna("0")
+                + "::"
+                + target_column
+            )
+            series_frames.append(series_df)
+
+        if series_frames:
+            finetune_df = pd.concat(series_frames, ignore_index=True)
+            finetune_df = finetune_df.sort_values(
+                [series_id_column, timestamp_column]
+            ).reset_index(drop=True)
+        else:
+            finetune_df = pd.DataFrame(
+                columns=[
+                    series_id_column,
+                    timestamp_column,
+                    target_value_column,
+                    *conditional_columns,
+                ]
+            )
 
         if len(finetune_df) > 0:
-            max_series_length = int(finetune_df.groupby(id_column, sort=False).size().max())
+            max_series_length = int(
+                finetune_df.groupby(series_id_column, sort=False).size().max()
+            )
             max_supported_context = max(
                 forecast_horizon, max_series_length - forecast_horizon
             )
@@ -223,7 +256,7 @@ class Chronos(InterchangeableModelInterface):
             train_inputs = []
             validation_inputs = []
 
-            for _, series_df in finetune_df.groupby(id_column, sort=False):
+            for _, series_df in finetune_df.groupby(series_id_column, sort=False):
                 if len(series_df) < min_series_length:
                     continue
 
@@ -242,11 +275,9 @@ class Chronos(InterchangeableModelInterface):
 
                 train_start = train_stop - n_finetune_series
                 train_series_df = series_df.iloc[train_start:train_stop]
-                train_target_values = train_series_df[target_columns].to_numpy(
+                train_target_values = train_series_df[target_value_column].to_numpy(
                     dtype=np.float32, copy=True
-                ).T
-                if train_target_values.shape[0] == 1:
-                    train_target_values = train_target_values[0]
+                )
 
                 train_series_input = {"target": train_target_values}
                 if conditional_columns:
@@ -259,10 +290,8 @@ class Chronos(InterchangeableModelInterface):
                 validation_series_df = series_df.iloc[train_stop:]
                 if len(validation_series_df) >= min_series_length:
                     validation_target_values = validation_series_df[
-                        target_columns
-                    ].to_numpy(dtype=np.float32, copy=True).T
-                    if validation_target_values.shape[0] == 1:
-                        validation_target_values = validation_target_values[0]
+                        target_value_column
+                    ].to_numpy(dtype=np.float32, copy=True)
 
                     validation_series_input = {"target": validation_target_values}
                     if conditional_columns:
@@ -416,6 +445,7 @@ class Chronos(InterchangeableModelInterface):
                         context_length=self.get_tsad_context_length(
                             ad_model_checkpoint=ad_model_checkpoint
                         ),
+                        max_windows=minimum_prediction_rows,
                     )
 
                 output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
@@ -633,6 +663,7 @@ class Chronos(InterchangeableModelInterface):
                                 dataset_path,
                                 col_config_for_tsad,
                                 context_length=self.get_tsad_context_length(),
+                                max_windows=minimum_prediction_rows,
                             )
 
                         tsad_output = _TimeSeriesAnomalyDetectionConformalWrapper().run(
@@ -697,7 +728,7 @@ class Chronos(InterchangeableModelInterface):
         with open(config_path, "r") as fh:
             return max(1, int(json.load(fh).get("context_length", 1)))
 
-    def build_tsad_prediction_dictionary(self, dataset_path, dataset_config, context_length):
+    def build_tsad_prediction_dictionary(self, dataset_path, dataset_config, context_length, max_windows=None):
         from ...io import _read_ts_data
 
         column_specifiers = dataset_config["column_specifiers"]
@@ -749,7 +780,12 @@ class Chronos(InterchangeableModelInterface):
 
         for series_id, series_df in predict_df.groupby(source_id_column, sort=False):
             series_df = series_df.sort_values(timestamp_column).reset_index(drop=True)
-            for end_idx in range(history_length, len(series_df)):
+            candidate_ends = range(history_length, len(series_df))
+            if max_windows is not None and len(candidate_ends) > max_windows:
+                # Evenly stride through the series instead of using every timestamp.
+                step = len(candidate_ends) // max_windows
+                candidate_ends = candidate_ends[::step][:max_windows]
+            for end_idx in candidate_ends:
                 window_id = f"{series_id}::{end_idx}"
                 start_idx = max(0, end_idx - history_length)
                 window_df = series_df.iloc[start_idx:end_idx].copy()
@@ -764,17 +800,25 @@ class Chronos(InterchangeableModelInterface):
                 "No rolling Chronos windows were available for anomaly detection."
             )
 
-        rolling_predict_df = pd.concat(rolling_frames, ignore_index=True)
-        pred_df = self.model.predict_df(
-            rolling_predict_df,
-            future_df=None,
-            prediction_length=1,
-            quantile_levels=[0.1, 0.5, 0.9],
-            id_column=synthetic_id_column,
-            timestamp_column=timestamp_column,
-            target=target_columns,
-            validate_inputs=False,
-        )
+        chunk_size = int(os.environ.get("CHRONOS_TSAD_WINDOW_CHUNK", "128"))
+        chunk_size = max(1, chunk_size)
+        pred_chunks = []
+        for chunk_start in range(0, len(rolling_frames), chunk_size):
+            chunk_frames = rolling_frames[chunk_start : chunk_start + chunk_size]
+            chunk_df = pd.concat(chunk_frames, ignore_index=True)
+            pred_chunks.append(
+                self.model.predict_df(
+                    chunk_df,
+                    future_df=None,
+                    prediction_length=1,
+                    quantile_levels=[0.1, 0.5, 0.9],
+                    id_column=synthetic_id_column,
+                    timestamp_column=timestamp_column,
+                    target=target_columns,
+                    validate_inputs=False,
+                )
+            )
+        pred_df = pd.concat(pred_chunks, ignore_index=True)
 
         point_forecast_column = "predictions"
         if "0.5" in pred_df.columns:

@@ -17,16 +17,34 @@ import pandas as pd
 import psutil
 import wandb
 
-load_dotenv()
 REPO_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(REPO_ROOT / ".env")
 sys.path.insert(0, str(REPO_ROOT))
 
-DATA_DIR = Path(os.getenv("PATH_TO_DATASETS_DIR", "/home/shared/tsfm_profiling_data/datasets")) / "dhaval_data"
-MODELS_DIR = REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"
-OUTPUT_DIR = REPO_ROOT / "tsfm_profiling" / "harness" / "results"
+DATASETS_ROOT = Path(os.getenv("PATH_TO_DATASETS_DIR", str(REPO_ROOT.parent))).expanduser()
+DATA_DIR = DATASETS_ROOT / "dhaval_data"
+MODELS_DIR = Path(
+    os.getenv(
+        "PATH_TO_MODELS_DIR",
+        str(REPO_ROOT / "src" / "servers" / "tsfm" / "artifacts" / "tsfm_models"),
+    )
+).expanduser()
+OUTPUT_DIR = Path(
+    os.getenv(
+        "PATH_TO_OUTPUTS_DIR",
+        str(REPO_ROOT / "tsfm_profiling" / "harness" / "results"),
+    )
+).expanduser()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-os.environ["PATH_TO_MODELS_DIR"] = str(MODELS_DIR)
+BENCH_ROWS_ENV = "TSFM_BENCH_ROWS"
+BENCH_SWEEP_K = [100]
+CHUNK_SIZE = 200_000
+MISSING_ASSET_ID = "__missing_asset_id__"
+
+os.environ.setdefault("PATH_TO_DATASETS_DIR", str(DATASETS_ROOT))
+os.environ.setdefault("PATH_TO_MODELS_DIR", str(MODELS_DIR))
+os.environ.setdefault("PATH_TO_OUTPUTS_DIR", str(OUTPUT_DIR))
 
 from src.servers.tsfm import cache as _cache
 from src.servers.tsfm.main import (
@@ -61,14 +79,241 @@ def apply_mode(mode: str) -> None:
     _cache.clear()
 
 
-WANDB_ENTITY = "lion-latency"
-WANDB_PROJECT = "hpml-project"
+WANDB_ENTITY = os.getenv("WANDB_ENTITY", "lion-latency")
+WANDB_PROJECT = os.getenv("WANDB_PROJECT", "hpml-project-final")
 
-FORECAST_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-FINETUNE_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
-TSAD_DATASET = str(DATA_DIR / "main_chiller9_small.csv")
 TIMESTAMP_COLUMN = "timestamp"
-TARGET_COLUMNS = ["Chiller 9 Condenser Water Flow"]
+SOURCE_DATASET = DATA_DIR / "main_flat.csv"
+ID_COLUMNS = ["asset_id"]
+EXCLUDED_COLUMNS = {TIMESTAMP_COLUMN, *ID_COLUMNS, "selector"}
+CHRONOS_TSAD_EXCLUDED_TARGET_PATTERN = re.compile(
+    r"\b(status|schedule|command)\b", re.IGNORECASE
+)
+
+
+def _load_target_groups(dataset_path: Path) -> dict[str, list[str]]:
+    header = pd.read_csv(dataset_path, nrows=0)
+    candidate_columns = [
+        column for column in header.columns if column not in EXCLUDED_COLUMNS
+    ]
+
+    asset_ids: set[str] = set()
+    for chunk in pd.read_csv(dataset_path, usecols=ID_COLUMNS, chunksize=CHUNK_SIZE, dtype=str):
+        asset_ids.update(chunk[ID_COLUMNS[0]].dropna().unique().tolist())
+
+    target_groups: dict[str, list[str]] = {}
+    for asset_id in sorted(asset_ids):
+        group_columns = [
+            column for column in candidate_columns if column.startswith(f"{asset_id} ")
+        ]
+        if group_columns:
+            target_groups[asset_id] = group_columns
+    return target_groups
+
+
+def _prepare_sampled_dataset(source_path: Path, output_dir: Path, requested_rows: int) -> Path:
+    row_label = f"{requested_rows // 1_000}k" if requested_rows % 1_000 == 0 else str(requested_rows)
+    sample_path = output_dir / f"sample_{row_label}.csv"
+    if sample_path.exists():
+        with sample_path.open("r", encoding="utf-8", newline="") as handle:
+            if max(sum(1 for _ in handle) - 1, 0) == requested_rows:
+                return sample_path
+
+    asset_counts: dict[str, int] = {}
+    for chunk in pd.read_csv(
+        source_path,
+        usecols=ID_COLUMNS,
+        chunksize=CHUNK_SIZE,
+        low_memory=False,
+    ):
+        asset_ids = chunk[ID_COLUMNS[0]].astype("string").fillna(MISSING_ASSET_ID)
+        for asset_id, count in asset_ids.value_counts(sort=False).items():
+            asset_key = str(asset_id)
+            asset_counts[asset_key] = asset_counts.get(asset_key, 0) + int(count)
+
+    total_rows = sum(asset_counts.values())
+    if requested_rows > total_rows:
+        raise ValueError(
+            f"Requested {requested_rows} rows but dataset only has {total_rows} rows"
+        )
+
+    asset_ids = sorted(asset_counts)
+    quotas = {asset_id: 0 for asset_id in asset_ids}
+    remaining_rows = requested_rows
+
+    if requested_rows >= len(asset_ids):
+        for asset_id in asset_ids:
+            quotas[asset_id] = 1
+            remaining_rows -= 1
+
+    remaining_capacity = {
+        asset_id: asset_counts[asset_id] - quotas[asset_id]
+        for asset_id in asset_ids
+    }
+    capacity_total = sum(remaining_capacity.values())
+    if remaining_rows > 0 and capacity_total > 0:
+        exact_additions = {
+            asset_id: remaining_rows * remaining_capacity[asset_id] / capacity_total
+            for asset_id in asset_ids
+        }
+        base_additions = {
+            asset_id: int(exact_additions[asset_id])
+            for asset_id in asset_ids
+        }
+        for asset_id in asset_ids:
+            quotas[asset_id] += base_additions[asset_id]
+        remaining_rows -= sum(base_additions.values())
+
+        if remaining_rows > 0:
+            ranked_assets = sorted(
+                asset_ids,
+                key=lambda asset_id: (
+                    exact_additions[asset_id] - base_additions[asset_id],
+                    asset_id,
+                ),
+                reverse=True,
+            )
+            for asset_id in ranked_assets:
+                if remaining_rows == 0:
+                    break
+                if quotas[asset_id] >= asset_counts[asset_id]:
+                    continue
+                quotas[asset_id] += 1
+                remaining_rows -= 1
+
+    remaining_quotas = dict(quotas)
+
+    tmp_path = sample_path.with_suffix(".tmp")
+    if tmp_path.exists():
+        tmp_path.unlink()
+
+    rows_written = 0
+    write_header = True
+    for chunk in pd.read_csv(source_path, chunksize=CHUNK_SIZE, low_memory=False):
+        chunk = chunk.copy()
+        chunk["_bench_asset_id"] = (
+            chunk[ID_COLUMNS[0]].astype("string").fillna(MISSING_ASSET_ID)
+        )
+
+        selected_indices: list[int] = []
+        for asset_id, asset_rows in chunk.groupby("_bench_asset_id", sort=False):
+            asset_key = str(asset_id)
+            remaining = remaining_quotas.get(asset_key, 0)
+            if remaining <= 0:
+                continue
+            take_count = min(remaining, len(asset_rows))
+            selected_indices.extend(asset_rows.index[:take_count].tolist())
+            remaining_quotas[asset_key] -= take_count
+
+        if not selected_indices:
+            continue
+
+        selected_chunk = (
+            chunk.loc[sorted(selected_indices)]
+            .drop(columns=["_bench_asset_id"])
+        )
+        selected_chunk.to_csv(
+            tmp_path,
+            mode="a",
+            header=write_header,
+            index=False,
+        )
+        write_header = False
+        rows_written += len(selected_chunk)
+
+        if rows_written >= requested_rows:
+            break
+
+    if rows_written != requested_rows:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise RuntimeError(
+            f"Expected to write {requested_rows} rows to {sample_path}, wrote {rows_written}"
+        )
+
+    tmp_path.replace(sample_path)
+    return sample_path
+
+
+def _build_dataset_configs() -> list[dict[str, Any]]:
+    raw_value = os.getenv(BENCH_ROWS_ENV)
+    requested_rows_list: list[int | None] = []
+
+    if raw_value is not None and raw_value.strip():
+        try:
+            requested_rows = int(raw_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"{BENCH_ROWS_ENV} must be a positive integer, got {raw_value!r}"
+            ) from exc
+        if requested_rows <= 0:
+            raise ValueError(
+                f"{BENCH_ROWS_ENV} must be greater than 0, got {requested_rows}"
+            )
+        requested_rows_list = [requested_rows]
+    else:
+        for sweep_k in BENCH_SWEEP_K:
+            sweep_size = int(sweep_k)
+            if sweep_size <= 0:
+                raise ValueError(
+                    f"BENCH_SWEEP_K entries must be greater than 0, got {sweep_size}"
+                )
+            requested_rows_list.append(sweep_size * 1_000)
+
+    dataset_configs: list[dict[str, Any]] = []
+    for requested_rows in requested_rows_list or [None]:
+        dataset_path = SOURCE_DATASET.resolve()
+        dataset_label = "real"
+        dataset_rows = None
+
+        if requested_rows is not None:
+            dataset_path = _prepare_sampled_dataset(
+                SOURCE_DATASET, OUTPUT_DIR, requested_rows
+            ).resolve()
+            dataset_label = dataset_path.stem
+            dataset_rows = requested_rows
+
+        target_groups = _load_target_groups(dataset_path)
+        if not target_groups:
+            raise RuntimeError(f"No target groups found in dataset {dataset_path}")
+
+        dataset_configs.append(
+            {
+                "dataset_label": dataset_label,
+                "dataset_path": str(dataset_path),
+                "dataset_rows": dataset_rows,
+                "requested_rows": requested_rows,
+                "target_groups": target_groups,
+            }
+        )
+
+    return dataset_configs
+
+
+TSAD_GROUPS_ALLOWLIST = {"Chiller 3"}
+
+
+def _filter_chronos_tsad_target_columns(target_columns: list[str]) -> list[str]:
+    return [
+        column
+        for column in target_columns
+        if not CHRONOS_TSAD_EXCLUDED_TARGET_PATTERN.search(column)
+    ]
+
+
+def _iter_target_groups(config: dict[str, Any], target_columns_filter=None, groups_allowlist=None):
+    for target_group, target_columns in config["target_groups"].items():
+        if target_group == "CQPA AHU 1": continue
+        if groups_allowlist is not None and target_group not in groups_allowlist:
+            continue
+        if target_columns_filter is not None:
+            target_columns = target_columns_filter(target_columns)
+        if not target_columns:
+            continue
+        group_config = dict(config)
+        group_config["target_group"] = target_group
+        group_config["target_count"] = len(target_columns)
+        yield group_config, target_columns
 
 
 def set_seed(seed):
@@ -244,6 +489,8 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
     row = {
         "workflow": workflow,
         "mode": mode,
+        "target_group": config.get("target_group"),
+        "target_count": config.get("target_count"),
         "run_index": run_index,
         "run_type": "cold_start" if run_index == 1 else "steady_state",
         "status": getattr(result, "status", "unknown"),
@@ -258,7 +505,9 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
         "model_checkpoint": config.get("model_checkpoint"),
         "forecast_horizon": config.get("forecast_horizon"),
         "seed": config.get("seed"),
-        "dataset": "real",
+        "dataset": config.get("dataset_label"),
+        "dataset_path": config.get("dataset_path"),
+        "dataset_rows": config.get("dataset_rows"),
     }
 
     for stage in stages:
@@ -277,14 +526,15 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
 def summarize(rows):
     cold = [r for r in rows if r["run_type"] == "cold_start" and r["status"] == "success"]
     steady = [r for r in rows if r["run_type"] == "steady_state" and r["status"] == "success"]
+    cold_end_to_end = [r["end_to_end_ms"] for r in cold if r.get("end_to_end_ms") is not None]
     return {
         "total_runs": len(rows),
         "successful_runs": sum(r["status"] == "success" for r in rows),
         "failed_runs": sum(r["status"] != "success" for r in rows),
-        "cold_start_latency_sec": cold[0]["latency_sec"] if cold else None,
+        "cold_start_latency_sec": mean([r["latency_sec"] for r in cold]) if cold else None,
         "steady_state_avg_latency_sec": mean([r["latency_sec"] for r in steady]) if steady else None,
         "steady_state_avg_rss_delta_mb": mean([r["cpu_rss_delta_mb"] for r in steady]) if steady else None,
-        "cold_start_end_to_end_ms": cold[0].get("end_to_end_ms") if cold else None,
+        "cold_start_end_to_end_ms": mean(cold_end_to_end) if cold_end_to_end else None,
         "steady_state_avg_end_to_end_ms": mean([r["end_to_end_ms"] for r in steady if r.get("end_to_end_ms")]) if steady else None,
         "steady_state_avg_overhead_ms": mean([r["overhead_ms"] for r in steady if r.get("overhead_ms")]) if steady else None,
     }
@@ -292,96 +542,115 @@ def summarize(rows):
 
 def bench_forecasting(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_forecasting,
-            dataset_path=FORECAST_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint=config["model_checkpoint"],
-            forecast_horizon=config["forecast_horizon"],
-        )
-        rows.append(make_row("forecasting", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_forecasting,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint=config["model_checkpoint"],
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("forecasting", i, result, latency, rss, group_config, mode))
     return rows
 
 
 def bench_finetuning(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_finetuning,
-            dataset_path=FINETUNE_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint=config["model_checkpoint"],
-            save_model_dir="tunedmodels",
-            forecast_horizon=config["forecast_horizon"],
-            n_finetune=0.05,
-            n_test=0.05,
-        )
-        rows.append(make_row("finetuning", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_finetuning,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint=config["model_checkpoint"],
+                save_model_dir="tunedmodels",
+                forecast_horizon=config["forecast_horizon"],
+                n_finetune=0.05,
+                n_test=0.05,
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("finetuning", i, result, latency, rss, group_config, mode))
     return rows
 
 
 def bench_tsad(config, mode):
-    forecast_result, _, _ = timed_run(
-        run_tsfm_forecasting,
-        dataset_path=FORECAST_DATASET,
-        timestamp_column=TIMESTAMP_COLUMN,
-        target_columns=TARGET_COLUMNS,
-        model_checkpoint=config["model_checkpoint"],
-        forecast_horizon=config["forecast_horizon"],
-    )
-    if getattr(forecast_result, "status", None) != "success":
-        raise RuntimeError(f"Forecasting pre-step failed: {forecast_result}")
-    forecast_file = forecast_result.results_file
-
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsad,
-            dataset_path=TSAD_DATASET,
-            tsfm_output_json=forecast_file,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            task="fit",
-            false_alarm=0.05,
-            n_calibration=0.2,
-        )
-        rows.append(make_row("tsad", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config, groups_allowlist=TSAD_GROUPS_ALLOWLIST):
+        for col in target_columns:
+            col_config = dict(group_config)
+            col_config["target_group"] = f"{group_config['target_group']} / {col}"
+            col_config["target_count"] = 1
+
+            forecast_result, _, _ = timed_run(
+                run_tsfm_forecasting,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=[col],
+                model_checkpoint=config["model_checkpoint"],
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            if getattr(forecast_result, "status", None) != "success":
+                continue
+            forecast_file = forecast_result.results_file
+
+            for i in range(1, config["repeats"] + 1):
+                result, latency, rss = timed_run(
+                    run_tsad,
+                    dataset_path=config["dataset_path"],
+                    tsfm_output_json=forecast_file,
+                    timestamp_column=TIMESTAMP_COLUMN,
+                    target_columns=[col],
+                    task="fit",
+                    false_alarm=0.05,
+                    n_calibration=0.2,
+                    id_columns=ID_COLUMNS,
+                )
+                rows.append(make_row("tsad", i, result, latency, rss, col_config, mode))
     return rows
 
 
 def bench_integrated_tsad(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_integrated_tsad,
-            dataset_path=TSAD_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint=config["model_checkpoint"],
-            false_alarm=0.05,
-            n_calibration=0.2,
-        )
-        rows.append(make_row("integrated_tsad", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config, groups_allowlist=TSAD_GROUPS_ALLOWLIST):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_integrated_tsad,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint=config["model_checkpoint"],
+                false_alarm=0.05,
+                n_calibration=0.2,
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("integrated_tsad", i, result, latency, rss, group_config, mode))
     return rows
 
 
-def log_to_wandb(workflow, rows, summary, run_tag="baseline", mode=None):
+def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None):
     run = wandb.init(
         entity=WANDB_ENTITY,
         project=WANDB_PROJECT,
-        name=f"bench_{workflow}_{run_tag}_{time.strftime('%Y%m%d_%H%M%S')}",
+        name=(
+            f"bench_{workflow}_{config.get('dataset_label')}_{run_tag}_"
+            f"{time.strftime('%Y%m%d_%H%M%S')}"
+        ),
         config={
             "workflow": workflow,
             "mode": mode,
             "cache_enabled": os.environ.get("TSFM_CACHE_ENABLED"),
             "preprocess_opt": os.environ.get("TSFM_PREPROCESS_OPT"),
             "preprocess_workers": os.environ.get("TSFM_PREPROCESS_WORKERS"),
-            "model_checkpoint": rows[0]["model_checkpoint"] if rows else None,
-            "repeats": len(rows),
-            "dataset": "real",
+            "model_checkpoint": config.get("model_checkpoint"),
+            "repeats": config.get("repeats"),
+            "dataset": config.get("dataset_label"),
+            "dataset_path": config.get("dataset_path"),
+            "dataset_rows": config.get("dataset_rows"),
             "run_tag": run_tag,
         },
         reinit="finish_previous",
@@ -450,6 +719,36 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline", mode=None):
             )
         })
 
+    successful_rows = [row for row in rows if row["status"] == "success"]
+    aggregate_metrics = {}
+
+    latency_values = [row["latency_sec"] for row in successful_rows]
+    if latency_values:
+        aggregate_metrics[f"{workflow}/avg_latency_sec"] = mean(latency_values)
+        aggregate_metrics[f"{workflow}/min_latency_sec"] = min(latency_values)
+        aggregate_metrics[f"{workflow}/max_latency_sec"] = max(latency_values)
+
+    end_to_end_values = [
+        row["end_to_end_ms"]
+        for row in successful_rows
+        if row.get("end_to_end_ms") is not None
+    ]
+    if end_to_end_values:
+        aggregate_metrics[f"{workflow}/avg_end_to_end_ms"] = mean(end_to_end_values)
+
+    overhead_values = [
+        row["overhead_ms"]
+        for row in successful_rows
+        if row.get("overhead_ms") is not None
+    ]
+    if overhead_values:
+        aggregate_metrics[f"{workflow}/avg_overhead_ms"] = mean(overhead_values)
+
+    if aggregate_metrics:
+        run.log(aggregate_metrics)
+        for key, value in aggregate_metrics.items():
+            run.summary[key] = value
+
     if summary["cold_start_latency_sec"] is not None:
         run.summary[f"{workflow}/cold_start_latency_sec"] = summary["cold_start_latency_sec"]
     if summary["steady_state_avg_latency_sec"] is not None:
@@ -469,30 +768,34 @@ def log_to_wandb(workflow, rows, summary, run_tag="baseline", mode=None):
 
 def bench_forecasting_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_forecasting_chronos,
-            dataset_path=FORECAST_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-            forecast_horizon=config["forecast_horizon"],
-        )
-        rows.append(make_row("forecasting_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_forecasting_chronos,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("forecasting_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 def bench_finetuning_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_tsfm_finetuning_chronos,
-            dataset_path=FINETUNE_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-            forecast_horizon=config["forecast_horizon"],
-        )
-        rows.append(make_row("finetuning_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(config):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_tsfm_finetuning_chronos,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            rows.append(make_row("finetuning_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 BENCHMARKS = {
@@ -504,28 +807,58 @@ BENCHMARKS = {
 
 def bench_tsad_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_integrated_tsad_chronos,
-            dataset_path=TSAD_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-        )
-        rows.append(make_row("tsad_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(
+        config, _filter_chronos_tsad_target_columns, groups_allowlist=TSAD_GROUPS_ALLOWLIST
+    ):
+        for col in target_columns:
+            col_config = dict(group_config)
+            col_config["target_group"] = f"{group_config['target_group']} / {col}"
+            col_config["target_count"] = 1
+
+            forecast_result, _, _ = timed_run(
+                run_tsfm_forecasting_chronos,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=[col],
+                model_checkpoint="amazon/chronos-2",
+                forecast_horizon=config["forecast_horizon"],
+                id_columns=ID_COLUMNS,
+            )
+            if getattr(forecast_result, "status", None) != "success":
+                continue
+            forecast_file = forecast_result.results_file
+
+            for i in range(1, config["repeats"] + 1):
+                result, latency, rss = timed_run(
+                    run_tsad_chronos,
+                    dataset_path=config["dataset_path"],
+                    tsfm_output_json=forecast_file,
+                    timestamp_column=TIMESTAMP_COLUMN,
+                    target_columns=[col],
+                    model_checkpoint="amazon/chronos-2",
+                    n_calibration=0.2,
+                    id_columns=ID_COLUMNS,
+                    frequency_sampling="15_minutes",
+                )
+                rows.append(make_row("tsad_chronos", i, result, latency, rss, col_config, mode))
     return rows
 
 def bench_integrated_tsad_chronos(config, mode):
     rows = []
-    for i in range(1, config["repeats"] + 1):
-        result, latency, rss = timed_run(
-            run_integrated_tsad_chronos,
-            dataset_path=TSAD_DATASET,
-            timestamp_column=TIMESTAMP_COLUMN,
-            target_columns=TARGET_COLUMNS,
-            model_checkpoint="amazon/chronos-2",
-        )
-        rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, config, mode))
+    for group_config, target_columns in _iter_target_groups(
+        config, _filter_chronos_tsad_target_columns, groups_allowlist=TSAD_GROUPS_ALLOWLIST
+    ):
+        for i in range(1, config["repeats"] + 1):
+            result, latency, rss = timed_run(
+                run_integrated_tsad_chronos,
+                dataset_path=config["dataset_path"],
+                timestamp_column=TIMESTAMP_COLUMN,
+                target_columns=target_columns,
+                model_checkpoint="amazon/chronos-2",
+                id_columns=ID_COLUMNS,
+                frequency_sampling="15_minutes",
+            )
+            rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
 BENCHMARKS_CHRONOS = {
@@ -542,15 +875,23 @@ def main():
     parser.add_argument("--modes", nargs="+", default=["baseline", "cache_only", "combined"],
                         choices=list(MODES.keys()))
     parser.add_argument("--model", default="ttm", choices=["ttm", "chronos"])
+    parser.add_argument(
+        "--workflows",
+        nargs="+",
+        choices=sorted(set(BENCHMARKS) | set(BENCHMARKS_CHRONOS)),
+    )
     args = parser.parse_args()
     modes = args.modes
     benchmarks = BENCHMARKS_CHRONOS if args.model == "chronos" else BENCHMARKS
+    selected_workflows = set(args.workflows) if args.workflows else None
 
-    config = {
+    dataset_configs = _build_dataset_configs()
+
+    base_config = {
         "model_checkpoint": "ttm_96_28",
-        "forecast_horizon": 24,
+        "forecast_horizon": -1,
         "seed": 42,
-        "repeats": 3,
+        "repeats": 1,
     }
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     all_rows = []
@@ -559,48 +900,90 @@ def main():
     print("TSFM EXTERNAL BENCHMARKING HARNESS")
     print("=" * 72)
     print(f"Entity: {WANDB_ENTITY} | Project: {WANDB_PROJECT}")
-    print(f"Dataset: real (main_chiller9_small.csv)")
-    print(f"Repeats per workflow: {config['repeats']}")
+    print(f"Model checkpoint: {base_config['model_checkpoint']}")
+    if os.getenv(BENCH_ROWS_ENV):
+        print(f"{BENCH_ROWS_ENV} override: {os.getenv(BENCH_ROWS_ENV)}")
+    else:
+        print(f"Sweep sizes (k rows): {BENCH_SWEEP_K}")
+    print(f"Repeats per workflow: {base_config['repeats']}")
     print(f"Modes: {modes}")
+    if selected_workflows is not None:
+        print(f"Workflows: {sorted(selected_workflows)}")
     print()
 
-    for mode in modes:
-        apply_mode(mode)
-        set_seed(config["seed"])
-        print("#" * 72)
-        print(f"# MODE: {mode}")
-        print("#" * 72)
-        for workflow, bench_fn in benchmarks.items():
-            print(f"--- {workflow.upper()} [{mode}] ---")
-            try:
-                rows = bench_fn(config, mode)
-            except Exception as e:
-                print(f"  SKIPPED ({e})")
-                continue
-            for r in rows:
-                print(
-                    f"  Run {r['run_index']} [{r['run_type']}] "
-                    f"status={r['status']} "
-                    f"latency={r['latency_sec']:.4f}s "
-                    f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
-                    f"overhead={r.get('overhead_ms', 'N/A')}ms"
-                )
-                if r["status"] != "success":
-                    print(f"    error: {r['error']}")
-            summary = summarize(rows)
-            print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
-            print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
-            print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
-            print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
-            log_to_wandb(workflow, rows, summary, run_tag=mode)
-            write_json(OUTPUT_DIR / f"{workflow}_{mode}_{timestamp}.json", rows)
-            write_csv(OUTPUT_DIR / f"{workflow}_{mode}_{timestamp}.csv", rows)
-            write_json(OUTPUT_DIR / f"{workflow}_{mode}_summary_{timestamp}.json", summary)
-            all_rows.extend(rows)
-            print()
+    for dataset_config in dataset_configs:
+        config = dict(base_config)
+        config.update(dataset_config)
+        dataset_rows: list[dict[str, Any]] = []
 
-    write_json(OUTPUT_DIR / f"all_benchmarks_{timestamp}.json", all_rows)
-    write_csv(OUTPUT_DIR / f"all_benchmarks_{timestamp}.csv", all_rows)
+        print("~" * 72)
+        print(f"Dataset: {config['dataset_label']}")
+        print(f"Dataset path: {config['dataset_path']}")
+        if config["requested_rows"] is not None:
+            print(f"Requested sampled rows: {config['requested_rows']}")
+        print(f"Target groups: {sorted(config['target_groups'])}")
+        print("~" * 72)
+
+        for mode in modes:
+            apply_mode(mode)
+            set_seed(config["seed"])
+            print("#" * 72)
+            print(f"# MODE: {mode}")
+            print("#" * 72)
+            for workflow, bench_fn in benchmarks.items():
+                if selected_workflows is not None and workflow not in selected_workflows:
+                    continue
+                print(f"--- {workflow.upper()} [{mode}] ---")
+                try:
+                    rows = bench_fn(config, mode)
+                except Exception as e:
+                    print(f"  SKIPPED ({e})")
+                    continue
+                for r in rows:
+                    group_label = f"[{r['target_group']}] " if r.get("target_group") else ""
+                    print(
+                        f"  {group_label}Run {r['run_index']} [{r['run_type']}] "
+                        f"status={r['status']} "
+                        f"latency={r['latency_sec']:.4f}s "
+                        f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
+                        f"overhead={r.get('overhead_ms', 'N/A')}ms"
+                    )
+                    if r["status"] != "success":
+                        print(f"    error: {r['error']}")
+                summary = summarize(rows)
+                print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
+                print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
+                print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
+                print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
+                log_to_wandb(workflow, rows, summary, config, run_tag=mode)
+                write_json(
+                    OUTPUT_DIR / f"{workflow}_{mode}_{config['dataset_label']}_{timestamp}.json",
+                    rows,
+                )
+                write_csv(
+                    OUTPUT_DIR / f"{workflow}_{mode}_{config['dataset_label']}_{timestamp}.csv",
+                    rows,
+                )
+                write_json(
+                    OUTPUT_DIR
+                    / f"{workflow}_{mode}_summary_{config['dataset_label']}_{timestamp}.json",
+                    summary,
+                )
+                dataset_rows.extend(rows)
+                all_rows.extend(rows)
+                print()
+
+        write_json(
+            OUTPUT_DIR / f"all_benchmarks_{config['dataset_label']}_{timestamp}.json",
+            dataset_rows,
+        )
+        write_csv(
+            OUTPUT_DIR / f"all_benchmarks_{config['dataset_label']}_{timestamp}.csv",
+            dataset_rows,
+        )
+
+    write_json(OUTPUT_DIR / f"all_benchmarks_sweep_{timestamp}.json", all_rows)
+    write_csv(OUTPUT_DIR / f"all_benchmarks_sweep_{timestamp}.csv", all_rows)
 
     print("=" * 72)
     print(f"Results saved to: {OUTPUT_DIR}")
