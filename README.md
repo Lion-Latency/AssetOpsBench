@@ -8,7 +8,7 @@
 
 ## Team Information
 
-- **Team Name:** Lion Latency
+- **Team Name:** Team 19 Lion Latency
 - **Members:**
   - Sally Go (yg3066) — External benchmarking harness, W&B logging, benchmarking
   - Sam Colman (sc5750) — Internal instrumentation, preprocessing caching
