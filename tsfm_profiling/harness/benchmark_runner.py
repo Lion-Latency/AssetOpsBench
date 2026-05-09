@@ -22,7 +22,6 @@ load_dotenv(REPO_ROOT / ".env")
 sys.path.insert(0, str(REPO_ROOT))
 
 DATASETS_ROOT = Path(os.getenv("PATH_TO_DATASETS_DIR", str(REPO_ROOT.parent))).expanduser()
-DATA_DIR = DATASETS_ROOT / "dhaval_data"
 MODELS_DIR = Path(
     os.getenv(
         "PATH_TO_MODELS_DIR",
@@ -83,7 +82,7 @@ WANDB_ENTITY = os.getenv("WANDB_ENTITY", "lion-latency")
 WANDB_PROJECT = os.getenv("WANDB_PROJECT", "hpml-project-final")
 
 TIMESTAMP_COLUMN = "timestamp"
-SOURCE_DATASET = DATA_DIR / "main_flat.csv"
+SOURCE_DATASET = REPO_ROOT / "tsfm_profiling" / "data" / "main.csv"
 ID_COLUMNS = ["asset_id"]
 EXCLUDED_COLUMNS = {TIMESTAMP_COLUMN, *ID_COLUMNS, "selector"}
 CHRONOS_TSAD_EXCLUDED_TARGET_PATTERN = re.compile(

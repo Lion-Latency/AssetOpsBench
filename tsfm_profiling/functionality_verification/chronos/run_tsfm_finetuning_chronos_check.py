@@ -1,6 +1,5 @@
 from pathlib import Path
 import json
-import os
 import tempfile
 import sys
 
@@ -13,12 +12,7 @@ sys.path.insert(0, str(repo_root))
 
 load_dotenv(repo_root / ".env")
 
-datasets_dir = os.getenv("PATH_TO_DATASETS_DIR")
-if not datasets_dir:
-    raise RuntimeError("PATH_TO_DATASETS_DIR is not set")
-
-DATA_DIR = Path(datasets_dir) / "dhaval_data"
-SOURCE_DATASET_PATH = DATA_DIR / "main_flat.csv"
+SOURCE_DATASET_PATH = repo_root / "tsfm_profiling" / "data" / "main.csv"
 TARGET_COLUMN = "Chiller 4 Liquid Refrigerant Evaporator Temperature"
 TIMESTAMP_COLUMN = "timestamp"
 SUBSET_START_ROW = 789000
