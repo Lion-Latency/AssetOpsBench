@@ -36,10 +36,7 @@ OUTPUT_DIR = Path(
 ).expanduser()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-BENCH_ROWS_ENV = "TSFM_BENCH_ROWS"
-BENCH_SWEEP_K = [100]
 CHUNK_SIZE = 200_000
-MISSING_ASSET_ID = "__missing_asset_id__"
 
 os.environ.setdefault("PATH_TO_DATASETS_DIR", str(DATASETS_ROOT))
 os.environ.setdefault("PATH_TO_MODELS_DIR", str(MODELS_DIR))
@@ -82,7 +79,8 @@ WANDB_ENTITY = os.getenv("WANDB_ENTITY", "lion-latency")
 WANDB_PROJECT = os.getenv("WANDB_PROJECT", "hpml-project-final")
 
 TIMESTAMP_COLUMN = "timestamp"
-SOURCE_DATASET = REPO_ROOT / "tsfm_profiling" / "data" / "main.csv"
+DATA_DIR = REPO_ROOT / "tsfm_profiling" / "data"
+SOURCE_DATASET = DATA_DIR / "sample.csv"
 ID_COLUMNS = ["asset_id"]
 EXCLUDED_COLUMNS = {TIMESTAMP_COLUMN, *ID_COLUMNS, "selector"}
 CHRONOS_TSAD_EXCLUDED_TARGET_PATTERN = re.compile(
@@ -110,183 +108,23 @@ def _load_target_groups(dataset_path: Path) -> dict[str, list[str]]:
     return target_groups
 
 
-def _prepare_sampled_dataset(source_path: Path, output_dir: Path, requested_rows: int) -> Path:
-    row_label = f"{requested_rows // 1_000}k" if requested_rows % 1_000 == 0 else str(requested_rows)
-    sample_path = output_dir / f"sample_{row_label}.csv"
-    if sample_path.exists():
-        with sample_path.open("r", encoding="utf-8", newline="") as handle:
-            if max(sum(1 for _ in handle) - 1, 0) == requested_rows:
-                return sample_path
-
-    asset_counts: dict[str, int] = {}
-    for chunk in pd.read_csv(
-        source_path,
-        usecols=ID_COLUMNS,
-        chunksize=CHUNK_SIZE,
-        low_memory=False,
-    ):
-        asset_ids = chunk[ID_COLUMNS[0]].astype("string").fillna(MISSING_ASSET_ID)
-        for asset_id, count in asset_ids.value_counts(sort=False).items():
-            asset_key = str(asset_id)
-            asset_counts[asset_key] = asset_counts.get(asset_key, 0) + int(count)
-
-    total_rows = sum(asset_counts.values())
-    if requested_rows > total_rows:
-        raise ValueError(
-            f"Requested {requested_rows} rows but dataset only has {total_rows} rows"
-        )
-
-    asset_ids = sorted(asset_counts)
-    quotas = {asset_id: 0 for asset_id in asset_ids}
-    remaining_rows = requested_rows
-
-    if requested_rows >= len(asset_ids):
-        for asset_id in asset_ids:
-            quotas[asset_id] = 1
-            remaining_rows -= 1
-
-    remaining_capacity = {
-        asset_id: asset_counts[asset_id] - quotas[asset_id]
-        for asset_id in asset_ids
-    }
-    capacity_total = sum(remaining_capacity.values())
-    if remaining_rows > 0 and capacity_total > 0:
-        exact_additions = {
-            asset_id: remaining_rows * remaining_capacity[asset_id] / capacity_total
-            for asset_id in asset_ids
-        }
-        base_additions = {
-            asset_id: int(exact_additions[asset_id])
-            for asset_id in asset_ids
-        }
-        for asset_id in asset_ids:
-            quotas[asset_id] += base_additions[asset_id]
-        remaining_rows -= sum(base_additions.values())
-
-        if remaining_rows > 0:
-            ranked_assets = sorted(
-                asset_ids,
-                key=lambda asset_id: (
-                    exact_additions[asset_id] - base_additions[asset_id],
-                    asset_id,
-                ),
-                reverse=True,
-            )
-            for asset_id in ranked_assets:
-                if remaining_rows == 0:
-                    break
-                if quotas[asset_id] >= asset_counts[asset_id]:
-                    continue
-                quotas[asset_id] += 1
-                remaining_rows -= 1
-
-    remaining_quotas = dict(quotas)
-
-    tmp_path = sample_path.with_suffix(".tmp")
-    if tmp_path.exists():
-        tmp_path.unlink()
-
-    rows_written = 0
-    write_header = True
-    for chunk in pd.read_csv(source_path, chunksize=CHUNK_SIZE, low_memory=False):
-        chunk = chunk.copy()
-        chunk["_bench_asset_id"] = (
-            chunk[ID_COLUMNS[0]].astype("string").fillna(MISSING_ASSET_ID)
-        )
-
-        selected_indices: list[int] = []
-        for asset_id, asset_rows in chunk.groupby("_bench_asset_id", sort=False):
-            asset_key = str(asset_id)
-            remaining = remaining_quotas.get(asset_key, 0)
-            if remaining <= 0:
-                continue
-            take_count = min(remaining, len(asset_rows))
-            selected_indices.extend(asset_rows.index[:take_count].tolist())
-            remaining_quotas[asset_key] -= take_count
-
-        if not selected_indices:
-            continue
-
-        selected_chunk = (
-            chunk.loc[sorted(selected_indices)]
-            .drop(columns=["_bench_asset_id"])
-        )
-        selected_chunk.to_csv(
-            tmp_path,
-            mode="a",
-            header=write_header,
-            index=False,
-        )
-        write_header = False
-        rows_written += len(selected_chunk)
-
-        if rows_written >= requested_rows:
-            break
-
-    if rows_written != requested_rows:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise RuntimeError(
-            f"Expected to write {requested_rows} rows to {sample_path}, wrote {rows_written}"
-        )
-
-    tmp_path.replace(sample_path)
-    return sample_path
-
-
 def _build_dataset_configs() -> list[dict[str, Any]]:
-    raw_value = os.getenv(BENCH_ROWS_ENV)
-    requested_rows_list: list[int | None] = []
-
-    if raw_value is not None and raw_value.strip():
-        try:
-            requested_rows = int(raw_value)
-        except ValueError as exc:
-            raise ValueError(
-                f"{BENCH_ROWS_ENV} must be a positive integer, got {raw_value!r}"
-            ) from exc
-        if requested_rows <= 0:
-            raise ValueError(
-                f"{BENCH_ROWS_ENV} must be greater than 0, got {requested_rows}"
-            )
-        requested_rows_list = [requested_rows]
-    else:
-        for sweep_k in BENCH_SWEEP_K:
-            sweep_size = int(sweep_k)
-            if sweep_size <= 0:
-                raise ValueError(
-                    f"BENCH_SWEEP_K entries must be greater than 0, got {sweep_size}"
-                )
-            requested_rows_list.append(sweep_size * 1_000)
-
-    dataset_configs: list[dict[str, Any]] = []
-    for requested_rows in requested_rows_list or [None]:
-        dataset_path = SOURCE_DATASET.resolve()
-        dataset_label = "real"
-        dataset_rows = None
-
-        if requested_rows is not None:
-            dataset_path = _prepare_sampled_dataset(
-                SOURCE_DATASET, OUTPUT_DIR, requested_rows
-            ).resolve()
-            dataset_label = dataset_path.stem
-            dataset_rows = requested_rows
-
-        target_groups = _load_target_groups(dataset_path)
-        if not target_groups:
-            raise RuntimeError(f"No target groups found in dataset {dataset_path}")
-
-        dataset_configs.append(
-            {
-                "dataset_label": dataset_label,
-                "dataset_path": str(dataset_path),
-                "dataset_rows": dataset_rows,
-                "requested_rows": requested_rows,
-                "target_groups": target_groups,
-            }
+    if not SOURCE_DATASET.exists():
+        raise FileNotFoundError(
+            f"Dataset not found at {SOURCE_DATASET}. "
+            f"Place sample.csv at tsfm_profiling/data/sample.csv to run the benchmark."
         )
-
-    return dataset_configs
+    dataset_path = SOURCE_DATASET.resolve()
+    target_groups = _load_target_groups(dataset_path)
+    if not target_groups:
+        raise RuntimeError(f"No target groups found in dataset {dataset_path}")
+    return [
+        {
+            "dataset_label": SOURCE_DATASET.stem,
+            "dataset_path": str(dataset_path),
+            "target_groups": target_groups,
+        }
+    ]
 
 
 TSAD_GROUPS_ALLOWLIST = {"Chiller 3"}
@@ -900,10 +738,7 @@ def main():
     print("=" * 72)
     print(f"Entity: {WANDB_ENTITY} | Project: {WANDB_PROJECT}")
     print(f"Model checkpoint: {base_config['model_checkpoint']}")
-    if os.getenv(BENCH_ROWS_ENV):
-        print(f"{BENCH_ROWS_ENV} override: {os.getenv(BENCH_ROWS_ENV)}")
-    else:
-        print(f"Sweep sizes (k rows): {BENCH_SWEEP_K}")
+    print(f"Dataset: {SOURCE_DATASET}")
     print(f"Repeats per workflow: {base_config['repeats']}")
     print(f"Modes: {modes}")
     if selected_workflows is not None:
@@ -918,8 +753,6 @@ def main():
         print("~" * 72)
         print(f"Dataset: {config['dataset_label']}")
         print(f"Dataset path: {config['dataset_path']}")
-        if config["requested_rows"] is not None:
-            print(f"Requested sampled rows: {config['requested_rows']}")
         print(f"Target groups: {sorted(config['target_groups'])}")
         print("~" * 72)
 

@@ -12,12 +12,15 @@ sys.path.insert(0, str(repo_root))
 
 load_dotenv(repo_root / ".env")
 
-SOURCE_DATASET_PATH = repo_root / "tsfm_profiling" / "data" / "main.csv"
+SOURCE_DATASET_PATH = repo_root / "tsfm_profiling" / "data" / "sample.csv"
+if not SOURCE_DATASET_PATH.exists():
+    raise FileNotFoundError(
+        f"Dataset not found at {SOURCE_DATASET_PATH}. "
+        "Place sample.csv at tsfm_profiling/data/sample.csv to run this check."
+    )
 TARGET_COLUMN = "Chiller 4 Liquid Refrigerant Evaporator Temperature"
 TIMESTAMP_COLUMN = "timestamp"
-SUBSET_START_ROW = 789000
 FORECAST_HORIZON = 24
-SUBSET_NROWS = 2000
 
 from src.servers.tsfm.main import run_tsfm_finetuning, run_tsfm_forecasting
 from src.servers.tsfm.metrics import _MAE, _MAPE, _RMSE
@@ -28,14 +31,10 @@ print("="*90)
 
 subset_df = pd.read_csv(
     SOURCE_DATASET_PATH,
-    low_memory=False,
-    skiprows=lambda idx: idx != 0 and not (
-        SUBSET_START_ROW <= idx < SUBSET_START_ROW + SUBSET_NROWS
-    ),
     usecols=[TIMESTAMP_COLUMN, TARGET_COLUMN],
+    low_memory=False,
 ).dropna()
-subset_dataset_path = Path(tempfile.mkdtemp()) / "dhaval_main_flat_subset.csv"
-subset_df.to_csv(subset_dataset_path, index=False)
+subset_dataset_path = SOURCE_DATASET_PATH
 
 subset_df[TIMESTAMP_COLUMN] = pd.to_datetime(
     subset_df[TIMESTAMP_COLUMN], format="ISO8601", utc=True
