@@ -64,11 +64,25 @@ MODES = {
     "parallelism_only": {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "1",
                          "TSFM_PREPROCESS_WORKERS": "4",
                          "TSFM_PREPROCESS_EXECUTOR": "thread"},
+    # Inference-side opts ported from sam/AssetOpsBench. Disjoint env vars
+    # so they stack cleanly on top of any preprocessing-cache mode above.
+    "model_cache":   {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1"},
+    "fast_trainer":  {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1",
+                      "TSFM_FAST_TRAINER": "1"},
+    "bf16":          {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1",
+                      "TSFM_BF16": "1", "TSFM_FAST_TRAINER": "1"},
+    "compile":       {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1",
+                      "TSFM_COMPILE": "1", "TSFM_FAST_TRAINER": "1"},
+    "all_inference": {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1",
+                      "TSFM_BF16": "1", "TSFM_COMPILE": "1",
+                      "TSFM_FAST_TRAINER": "1"},
 }
 
 def apply_mode(mode: str) -> None:
     for k in ("TSFM_CACHE_ENABLED", "TSFM_PREPROCESS_OPT",
-              "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR"):
+              "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR",
+              "TSFM_MODEL_CACHE", "TSFM_COMPILE", "TSFM_BF16",
+              "TSFM_FAST_TRAINER"):
         os.environ.pop(k, None)
     for k, v in MODES[mode].items():
         os.environ[k] = v
@@ -352,7 +366,9 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
         row[f"stage_{name}_ms"] = stage.get("wall_clock_ms")
         row[f"stage_{name}_rss_delta_mb"] = stage.get("rss_delta_mb")
         if "gpu_mem_delta_mb" in stage:
-            row[f"stage_{name}_gpu_delta_mb"] = stage.get("gpu_mem_delta_mb")
+            row[f"stage_{name}_gpu_alloc_delta_mb"] = stage.get("gpu_mem_delta_mb")
+        if "gpu_mem_peak_mb" in stage:
+            row[f"stage_{name}_gpu_peak_mb"] = stage.get("gpu_mem_peak_mb")
 
     perf_metrics = extract_performance_metrics(result)
     row.update(perf_metrics)
@@ -483,6 +499,10 @@ def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None)
             "cache_enabled": os.environ.get("TSFM_CACHE_ENABLED"),
             "preprocess_opt": os.environ.get("TSFM_PREPROCESS_OPT"),
             "preprocess_workers": os.environ.get("TSFM_PREPROCESS_WORKERS"),
+            "model_cache": os.environ.get("TSFM_MODEL_CACHE"),
+            "compile": os.environ.get("TSFM_COMPILE"),
+            "bf16": os.environ.get("TSFM_BF16"),
+            "fast_trainer": os.environ.get("TSFM_FAST_TRAINER"),
             "model_checkpoint": config.get("model_checkpoint"),
             "repeats": config.get("repeats"),
             "dataset": config.get("dataset_label"),
