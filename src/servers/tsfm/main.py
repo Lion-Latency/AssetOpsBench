@@ -84,6 +84,11 @@ def _emit_metrics(metrics: RequestMetrics) -> None:
     Writes JSON to the profiling logger.  The external harness can also
     retrieve reports by reading the structured log or by extending this
     function to write to a file / send to W&B.
+
+    When the harness drives this server over stdio (--transport stdio in
+    benchmark_runner), it sets `TSFM_BENCH_REPORT_DIR`; the per-call report
+    is appended to `reports.jsonl` in that dir so the client subprocess can
+    read it back across the MCP boundary. Best-effort: never raises.
     """
     import json as _json
 
@@ -91,6 +96,15 @@ def _emit_metrics(metrics: RequestMetrics) -> None:
     logger.info("PROFILING_REPORT %s", _json.dumps(report))
     # Store on the module so the external harness can retrieve the last report
     _emit_metrics._last_report = report
+
+    bench_dir = os.environ.get("TSFM_BENCH_REPORT_DIR")
+    if bench_dir:
+        try:
+            os.makedirs(bench_dir, exist_ok=True)
+            with open(os.path.join(bench_dir, "reports.jsonl"), "a") as _f:
+                _f.write(_json.dumps(report, default=str) + "\n")
+        except Exception:
+            pass  # Telemetry must never crash a tool call
 
 
 _emit_metrics._last_report = None

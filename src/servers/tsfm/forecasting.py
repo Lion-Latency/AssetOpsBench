@@ -144,6 +144,78 @@ def _bf16_autocast_ctx():
     return contextlib.nullcontext()
 
 
+# ── Optional inference profilers (env-gated; harness-driven) ─────────────────
+
+
+import contextlib as _contextlib
+
+
+@_contextlib.contextmanager
+def _torch_profile_ctx():
+    """Wrap the inference stage with torch.profiler when the harness enables it.
+
+    Active iff `TSFM_TORCH_PROFILE_DIR` is set. Writes one tensorboard-format
+    trace per call into a unique subdir so multiple iters in the same bench
+    run don't collide. No-op (yields None) when unset.
+    """
+    d = os.environ.get("TSFM_TORCH_PROFILE_DIR")
+    if not d:
+        yield None
+        return
+    try:
+        import torch
+        from torch.profiler import (
+            ProfilerActivity,
+            profile as _torch_profile,
+            tensorboard_trace_handler,
+        )
+    except Exception:
+        yield None
+        return
+    os.makedirs(d, exist_ok=True)
+    activities = [ProfilerActivity.CPU]
+    if torch.cuda.is_available():
+        activities.append(ProfilerActivity.CUDA)
+    out_subdir = os.path.join(d, f"trace_{time.time_ns()}")
+    with _torch_profile(
+        activities=activities,
+        on_trace_ready=tensorboard_trace_handler(out_subdir),
+        record_shapes=False,
+        with_stack=False,
+    ) as prof:
+        yield prof
+        # Single call = single profiling step. Without this `step()` the
+        # tensorboard handler never fires.
+        prof.step()
+
+
+@_contextlib.contextmanager
+def _cprofile_ctx():
+    """Capture cProfile stats for the inference stage when the harness enables it.
+
+    Active iff `TSFM_CPROFILE_DIR` is set. Dumps one `.prof` per call (load
+    later with `pstats.Stats(path)`). No-op when unset.
+    """
+    d = os.environ.get("TSFM_CPROFILE_DIR")
+    if not d:
+        yield None
+        return
+    import cProfile
+
+    os.makedirs(d, exist_ok=True)
+    p = cProfile.Profile()
+    p.enable()
+    try:
+        yield p
+    finally:
+        p.disable()
+        try:
+            p.dump_stats(os.path.join(d, f"prof_{time.time_ns()}.prof"))
+        except Exception:
+            # Profiler dump must never crash the tool call.
+            pass
+
+
 # ── Shared collator (Trainer path + fast-trainer path) ───────────────────────
 
 
@@ -542,7 +614,7 @@ def _get_ttm_hf_inference(
             trainer = None
 
     # ── Stage: inference ──────────────────────────────────────────────────
-    with stage_timer("inference", metrics):
+    with stage_timer("inference", metrics), _torch_profile_ctx(), _cprofile_ctx():
         ix_target_features = list(
             np.arange(len(dataset_config_dictionary["column_specifiers"]["target_columns"]))
         )

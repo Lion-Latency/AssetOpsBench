@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -54,6 +54,26 @@ from src.servers.tsfm.main import (
     run_tsad_chronos,
     run_integrated_tsad_chronos,
 )
+from tsfm_profiling.harness._stdio_client import StdioBenchClient, shim_result
+
+# Maps MCP tool name -> in-process callable. Used by `_invoke_tool` when
+# `--transport in_process` so we keep one dispatch site for both transports.
+_TOOL_REGISTRY = {
+    "run_tsfm_forecasting": run_tsfm_forecasting,
+    "run_tsfm_finetuning": run_tsfm_finetuning,
+    "run_tsad": run_tsad,
+    "run_integrated_tsad": run_integrated_tsad,
+    "run_tsfm_forecasting_chronos": run_tsfm_forecasting_chronos,
+    "run_tsfm_finetuning_chronos": run_tsfm_finetuning_chronos,
+    "run_tsad_chronos": run_tsad_chronos,
+    "run_integrated_tsad_chronos": run_integrated_tsad_chronos,
+}
+
+# Mutable state set by `apply_mode`. Module globals because the existing
+# bench_* fns are sync and we don't want to thread a context through every
+# signature just for transport selection.
+_TRANSPORT: str = "in_process"
+_STDIO_CLIENT: Optional["StdioBenchClient"] = None
 
 MODES = {
     "baseline":   {"TSFM_CACHE_ENABLED": "0", "TSFM_PREPROCESS_OPT": "0"},
@@ -78,15 +98,112 @@ MODES = {
                       "TSFM_FAST_TRAINER": "1"},
 }
 
+_OPT_ENV_VARS = (
+    "TSFM_CACHE_ENABLED", "TSFM_PREPROCESS_OPT",
+    "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR",
+    "TSFM_MODEL_CACHE", "TSFM_COMPILE", "TSFM_BF16",
+    "TSFM_FAST_TRAINER",
+)
+
+
 def apply_mode(mode: str) -> None:
-    for k in ("TSFM_CACHE_ENABLED", "TSFM_PREPROCESS_OPT",
-              "TSFM_PREPROCESS_WORKERS", "TSFM_PREPROCESS_EXECUTOR",
-              "TSFM_MODEL_CACHE", "TSFM_COMPILE", "TSFM_BF16",
-              "TSFM_FAST_TRAINER"):
+    """Apply env vars for the given mode in this process.
+
+    For in_process transport this also clears the in-process preprocessing
+    cache so each mode starts cold. For stdio transport the server gets the
+    env vars at subprocess start (see `enter_stdio_for_mode`); the in-process
+    cache here is irrelevant.
+    """
+    for k in _OPT_ENV_VARS:
         os.environ.pop(k, None)
     for k, v in MODES[mode].items():
         os.environ[k] = v
-    _cache.clear()
+    if _TRANSPORT == "in_process":
+        _cache.clear()
+
+
+def mode_env_overrides(mode: str) -> dict:
+    """Just the env-var overrides for a mode (used to seed the stdio server)."""
+    return dict(MODES[mode])
+
+
+def set_transport(transport: str) -> None:
+    global _TRANSPORT
+    if transport not in ("in_process", "stdio"):
+        raise ValueError(f"unknown transport: {transport}")
+    _TRANSPORT = transport
+
+
+def enter_stdio_for_mode(
+    mode: str,
+    server_cmd: Optional[str] = None,
+    server_args: Optional[list] = None,
+) -> StdioBenchClient:
+    """Open a fresh stdio session for the given mode and stash it globally.
+
+    Defaults `server_cmd` to `sys.executable -m servers.tsfm.main` and prepends
+    `<REPO_ROOT>/src` to `PYTHONPATH` so the subprocess imports MainProj's
+    source rather than whatever `tsfm-mcp-server` console script the active
+    venv was installed against. Override `--server-cmd` to point at an
+    explicit entry point if you want a different server build.
+    """
+    global _STDIO_CLIENT
+    if _STDIO_CLIENT is not None:
+        _STDIO_CLIENT.__exit__(None, None, None)
+        _STDIO_CLIENT = None
+    overrides = mode_env_overrides(mode)
+    src_dir = str(REPO_ROOT / "src")
+    existing_pp = os.environ.get("PYTHONPATH", "")
+    overrides["PYTHONPATH"] = (
+        src_dir + (os.pathsep + existing_pp if existing_pp else "")
+    )
+    if server_cmd is None:
+        server_cmd = sys.executable
+        if server_args is None:
+            server_args = ["-m", "servers.tsfm.main"]
+    cli = StdioBenchClient(
+        env_overrides=overrides,
+        server_cmd=server_cmd,
+        server_args=server_args,
+    )
+    cli.__enter__()
+    _STDIO_CLIENT = cli
+    return cli
+
+
+def exit_stdio() -> None:
+    global _STDIO_CLIENT
+    if _STDIO_CLIENT is not None:
+        _STDIO_CLIENT.__exit__(None, None, None)
+        _STDIO_CLIENT = None
+
+
+def _invoke_tool(tool_name: str, args: dict):
+    """Dispatch one tool call and return (result_obj, latency_sec, rss_delta_mb).
+
+    For stdio transport the server's stage-breakdown report is pulled from
+    the per-call JSONL and stashed onto `_emit_metrics._last_report` (the
+    same global `make_row` already reads), so downstream row construction
+    stays transport-agnostic.
+    """
+    process = psutil.Process(os.getpid())
+    start_rss = process.memory_info().rss
+    start = time.perf_counter()
+    if _TRANSPORT == "in_process":
+        fn = _TOOL_REGISTRY[tool_name]
+        result = fn(**args)
+        latency = time.perf_counter() - start
+        rss_delta = bytes_to_mb(process.memory_info().rss - start_rss)
+        return result, latency, rss_delta
+
+    # stdio
+    assert _STDIO_CLIENT is not None, "enter_stdio_for_mode() not called"
+    data = _STDIO_CLIENT.call(tool_name, args)
+    latency = time.perf_counter() - start
+    rss_delta = bytes_to_mb(process.memory_info().rss - start_rss)
+    report = _STDIO_CLIENT.read_latest_report()
+    _emit_metrics._last_report = report or {}
+    return shim_result(data), latency, rss_delta
 
 
 WANDB_ENTITY = os.getenv("WANDB_ENTITY", "lion-latency")
@@ -361,6 +478,13 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
         "dataset_rows": config.get("dataset_rows"),
     }
 
+    nvml_keys = (
+        "gpu_power_w_mean", "gpu_power_w_max",
+        "gpu_util_pct_mean", "gpu_util_pct_max",
+        "gpu_mem_util_pct_mean",
+        "sm_clock_mhz_mean", "mem_clock_mhz_mean",
+        "nvml_samples",
+    )
     for stage in stages:
         name = stage["stage"]
         row[f"stage_{name}_ms"] = stage.get("wall_clock_ms")
@@ -369,6 +493,9 @@ def make_row(workflow, run_index, result, latency, rss_delta, config, mode=None)
             row[f"stage_{name}_gpu_alloc_delta_mb"] = stage.get("gpu_mem_delta_mb")
         if "gpu_mem_peak_mb" in stage:
             row[f"stage_{name}_gpu_peak_mb"] = stage.get("gpu_mem_peak_mb")
+        for k in nvml_keys:
+            if k in stage:
+                row[f"stage_{name}_{k}"] = stage[k]
 
     perf_metrics = extract_performance_metrics(result)
     row.update(perf_metrics)
@@ -397,15 +524,14 @@ def bench_forecasting(config, mode):
     rows = []
     for group_config, target_columns in _iter_target_groups(config):
         for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_tsfm_forecasting,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                model_checkpoint=config["model_checkpoint"],
-                forecast_horizon=config["forecast_horizon"],
-                id_columns=ID_COLUMNS,
-            )
+            result, latency, rss = _invoke_tool("run_tsfm_forecasting", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": target_columns,
+                "model_checkpoint": config["model_checkpoint"],
+                "forecast_horizon": config["forecast_horizon"],
+                "id_columns": ID_COLUMNS,
+            })
             rows.append(make_row("forecasting", i, result, latency, rss, group_config, mode))
     return rows
 
@@ -414,18 +540,17 @@ def bench_finetuning(config, mode):
     rows = []
     for group_config, target_columns in _iter_target_groups(config):
         for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_tsfm_finetuning,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                model_checkpoint=config["model_checkpoint"],
-                save_model_dir="tunedmodels",
-                forecast_horizon=config["forecast_horizon"],
-                n_finetune=0.05,
-                n_test=0.05,
-                id_columns=ID_COLUMNS,
-            )
+            result, latency, rss = _invoke_tool("run_tsfm_finetuning", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": target_columns,
+                "model_checkpoint": config["model_checkpoint"],
+                "save_model_dir": "tunedmodels",
+                "forecast_horizon": config["forecast_horizon"],
+                "n_finetune": 0.05,
+                "n_test": 0.05,
+                "id_columns": ID_COLUMNS,
+            })
             rows.append(make_row("finetuning", i, result, latency, rss, group_config, mode))
     return rows
 
@@ -438,31 +563,29 @@ def bench_tsad(config, mode):
             col_config["target_group"] = f"{group_config['target_group']} / {col}"
             col_config["target_count"] = 1
 
-            forecast_result, _, _ = timed_run(
-                run_tsfm_forecasting,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=[col],
-                model_checkpoint=config["model_checkpoint"],
-                forecast_horizon=config["forecast_horizon"],
-                id_columns=ID_COLUMNS,
-            )
+            forecast_result, _, _ = _invoke_tool("run_tsfm_forecasting", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": [col],
+                "model_checkpoint": config["model_checkpoint"],
+                "forecast_horizon": config["forecast_horizon"],
+                "id_columns": ID_COLUMNS,
+            })
             if getattr(forecast_result, "status", None) != "success":
                 continue
             forecast_file = forecast_result.results_file
 
             for i in range(1, config["repeats"] + 1):
-                result, latency, rss = timed_run(
-                    run_tsad,
-                    dataset_path=config["dataset_path"],
-                    tsfm_output_json=forecast_file,
-                    timestamp_column=TIMESTAMP_COLUMN,
-                    target_columns=[col],
-                    task="fit",
-                    false_alarm=0.05,
-                    n_calibration=0.2,
-                    id_columns=ID_COLUMNS,
-                )
+                result, latency, rss = _invoke_tool("run_tsad", {
+                    "dataset_path": config["dataset_path"],
+                    "tsfm_output_json": forecast_file,
+                    "timestamp_column": TIMESTAMP_COLUMN,
+                    "target_columns": [col],
+                    "task": "fit",
+                    "false_alarm": 0.05,
+                    "n_calibration": 0.2,
+                    "id_columns": ID_COLUMNS,
+                })
                 rows.append(make_row("tsad", i, result, latency, rss, col_config, mode))
     return rows
 
@@ -471,16 +594,15 @@ def bench_integrated_tsad(config, mode):
     rows = []
     for group_config, target_columns in _iter_target_groups(config, groups_allowlist=TSAD_GROUPS_ALLOWLIST):
         for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_integrated_tsad,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                model_checkpoint=config["model_checkpoint"],
-                false_alarm=0.05,
-                n_calibration=0.2,
-                id_columns=ID_COLUMNS,
-            )
+            result, latency, rss = _invoke_tool("run_integrated_tsad", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": target_columns,
+                "model_checkpoint": config["model_checkpoint"],
+                "false_alarm": 0.05,
+                "n_calibration": 0.2,
+                "id_columns": ID_COLUMNS,
+            })
             rows.append(make_row("integrated_tsad", i, result, latency, rss, group_config, mode))
     return rows
 
@@ -627,15 +749,14 @@ def bench_forecasting_chronos(config, mode):
     rows = []
     for group_config, target_columns in _iter_target_groups(config):
         for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_tsfm_forecasting_chronos,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                model_checkpoint="amazon/chronos-2",
-                forecast_horizon=config["forecast_horizon"],
-                id_columns=ID_COLUMNS,
-            )
+            result, latency, rss = _invoke_tool("run_tsfm_forecasting_chronos", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": target_columns,
+                "model_checkpoint": "amazon/chronos-2",
+                "forecast_horizon": config["forecast_horizon"],
+                "id_columns": ID_COLUMNS,
+            })
             rows.append(make_row("forecasting_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
@@ -643,15 +764,14 @@ def bench_finetuning_chronos(config, mode):
     rows = []
     for group_config, target_columns in _iter_target_groups(config):
         for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_tsfm_finetuning_chronos,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                model_checkpoint="amazon/chronos-2",
-                forecast_horizon=config["forecast_horizon"],
-                id_columns=ID_COLUMNS,
-            )
+            result, latency, rss = _invoke_tool("run_tsfm_finetuning_chronos", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": target_columns,
+                "model_checkpoint": "amazon/chronos-2",
+                "forecast_horizon": config["forecast_horizon"],
+                "id_columns": ID_COLUMNS,
+            })
             rows.append(make_row("finetuning_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
@@ -672,31 +792,29 @@ def bench_tsad_chronos(config, mode):
             col_config["target_group"] = f"{group_config['target_group']} / {col}"
             col_config["target_count"] = 1
 
-            forecast_result, _, _ = timed_run(
-                run_tsfm_forecasting_chronos,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=[col],
-                model_checkpoint="amazon/chronos-2",
-                forecast_horizon=config["forecast_horizon"],
-                id_columns=ID_COLUMNS,
-            )
+            forecast_result, _, _ = _invoke_tool("run_tsfm_forecasting_chronos", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": [col],
+                "model_checkpoint": "amazon/chronos-2",
+                "forecast_horizon": config["forecast_horizon"],
+                "id_columns": ID_COLUMNS,
+            })
             if getattr(forecast_result, "status", None) != "success":
                 continue
             forecast_file = forecast_result.results_file
 
             for i in range(1, config["repeats"] + 1):
-                result, latency, rss = timed_run(
-                    run_tsad_chronos,
-                    dataset_path=config["dataset_path"],
-                    tsfm_output_json=forecast_file,
-                    timestamp_column=TIMESTAMP_COLUMN,
-                    target_columns=[col],
-                    model_checkpoint="amazon/chronos-2",
-                    n_calibration=0.2,
-                    id_columns=ID_COLUMNS,
-                    frequency_sampling="15_minutes",
-                )
+                result, latency, rss = _invoke_tool("run_tsad_chronos", {
+                    "dataset_path": config["dataset_path"],
+                    "tsfm_output_json": forecast_file,
+                    "timestamp_column": TIMESTAMP_COLUMN,
+                    "target_columns": [col],
+                    "model_checkpoint": "amazon/chronos-2",
+                    "n_calibration": 0.2,
+                    "id_columns": ID_COLUMNS,
+                    "frequency_sampling": "15_minutes",
+                })
                 rows.append(make_row("tsad_chronos", i, result, latency, rss, col_config, mode))
     return rows
 
@@ -706,15 +824,14 @@ def bench_integrated_tsad_chronos(config, mode):
         config, _filter_chronos_tsad_target_columns, groups_allowlist=TSAD_GROUPS_ALLOWLIST
     ):
         for i in range(1, config["repeats"] + 1):
-            result, latency, rss = timed_run(
-                run_integrated_tsad_chronos,
-                dataset_path=config["dataset_path"],
-                timestamp_column=TIMESTAMP_COLUMN,
-                target_columns=target_columns,
-                model_checkpoint="amazon/chronos-2",
-                id_columns=ID_COLUMNS,
-                frequency_sampling="15_minutes",
-            )
+            result, latency, rss = _invoke_tool("run_integrated_tsad_chronos", {
+                "dataset_path": config["dataset_path"],
+                "timestamp_column": TIMESTAMP_COLUMN,
+                "target_columns": target_columns,
+                "model_checkpoint": "amazon/chronos-2",
+                "id_columns": ID_COLUMNS,
+                "frequency_sampling": "15_minutes",
+            })
             rows.append(make_row("integrated_tsad_chronos", i, result, latency, rss, group_config, mode))
     return rows
 
@@ -737,10 +854,61 @@ def main():
         nargs="+",
         choices=sorted(set(BENCHMARKS) | set(BENCHMARKS_CHRONOS)),
     )
+    parser.add_argument(
+        "--transport",
+        default="in_process",
+        choices=["in_process", "stdio"],
+        help="in_process: call tool fns directly; "
+             "stdio: spawn `tsfm-mcp-server` subprocess and route via MCP client "
+             "(captures FastMCP dispatch + JSON-RPC framing overhead).",
+    )
+    parser.add_argument(
+        "--server-cmd",
+        default=None,
+        help="Server entry-point used for --transport stdio. Defaults to "
+             "`<this-python> -m servers.tsfm.main` with PYTHONPATH=<repo>/src "
+             "so the subprocess imports MainProj source. Override only if you "
+             "want to bench a different server build.",
+    )
+    parser.add_argument(
+        "--server-args",
+        nargs="*",
+        default=None,
+        help="Args appended to --server-cmd. Default: ['-m', 'servers.tsfm.main'] "
+             "when --server-cmd is also default; empty otherwise.",
+    )
+    parser.add_argument(
+        "--torch-profile",
+        default=None,
+        metavar="DIR",
+        help="Wrap each inference call with torch.profiler and write a "
+             "tensorboard-format trace to DIR/trace_<timestamp>/. Works for "
+             "both --transport in_process and stdio (env-var to server). "
+             "Open with `tensorboard --logdir DIR`.",
+    )
+    parser.add_argument(
+        "--cprofile",
+        default=None,
+        metavar="DIR",
+        help="Capture cProfile stats per inference call into DIR/prof_<ts>.prof. "
+             "Works for both transports. Inspect with "
+             "`python -c \"import pstats; pstats.Stats('prof.prof').sort_stats('cumulative').print_stats(30)\"`.",
+    )
     args = parser.parse_args()
     modes = args.modes
     benchmarks = BENCHMARKS_CHRONOS if args.model == "chronos" else BENCHMARKS
     selected_workflows = set(args.workflows) if args.workflows else None
+    set_transport(args.transport)
+
+    # Profiler dirs path to server 
+    # in-process: same env; stdio: inherited by spawned subprocess via StdioBenchClient.
+    # Absolute paths so cwd changes don't relocate output.
+    if args.torch_profile:
+        os.environ["TSFM_TORCH_PROFILE_DIR"] = str(Path(args.torch_profile).resolve())
+        Path(args.torch_profile).resolve().mkdir(parents=True, exist_ok=True)
+    if args.cprofile:
+        os.environ["TSFM_CPROFILE_DIR"] = str(Path(args.cprofile).resolve())
+        Path(args.cprofile).resolve().mkdir(parents=True, exist_ok=True)
 
     dataset_configs = _build_dataset_configs()
 
@@ -780,50 +948,61 @@ def main():
             apply_mode(mode)
             set_seed(config["seed"])
             print("#" * 72)
-            print(f"# MODE: {mode}")
+            print(f"# MODE: {mode}  (transport: {args.transport})")
             print("#" * 72)
-            for workflow, bench_fn in benchmarks.items():
-                if selected_workflows is not None and workflow not in selected_workflows:
-                    continue
-                print(f"--- {workflow.upper()} [{mode}] ---")
-                try:
-                    rows = bench_fn(config, mode)
-                except Exception as e:
-                    print(f"  SKIPPED ({e})")
-                    continue
-                for r in rows:
-                    group_label = f"[{r['target_group']}] " if r.get("target_group") else ""
-                    print(
-                        f"  {group_label}Run {r['run_index']} [{r['run_type']}] "
-                        f"status={r['status']} "
-                        f"latency={r['latency_sec']:.4f}s "
-                        f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
-                        f"overhead={r.get('overhead_ms', 'N/A')}ms"
+            try:
+                if args.transport == "stdio":
+                    cli = enter_stdio_for_mode(
+                        mode,
+                        server_cmd=args.server_cmd,
+                        server_args=args.server_args,
                     )
-                    if r["status"] != "success":
-                        print(f"    error: {r['error']}")
-                summary = summarize(rows)
-                print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
-                print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
-                print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
-                print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
-                log_to_wandb(workflow, rows, summary, config, run_tag=mode)
-                write_json(
-                    OUTPUT_DIR / f"{workflow}_{mode}_{config['dataset_label']}_{timestamp}.json",
-                    rows,
-                )
-                write_csv(
-                    OUTPUT_DIR / f"{workflow}_{mode}_{config['dataset_label']}_{timestamp}.csv",
-                    rows,
-                )
-                write_json(
-                    OUTPUT_DIR
-                    / f"{workflow}_{mode}_summary_{config['dataset_label']}_{timestamp}.json",
-                    summary,
-                )
-                dataset_rows.extend(rows)
-                all_rows.extend(rows)
-                print()
+                    print(f"  stdio init: {cli.init_ms:.1f}ms")
+                for workflow, bench_fn in benchmarks.items():
+                    if selected_workflows is not None and workflow not in selected_workflows:
+                        continue
+                    print(f"--- {workflow.upper()} [{mode}] ---")
+                    try:
+                        rows = bench_fn(config, mode)
+                    except Exception as e:
+                        print(f"  SKIPPED ({e})")
+                        continue
+                    for r in rows:
+                        group_label = f"[{r['target_group']}] " if r.get("target_group") else ""
+                        print(
+                            f"  {group_label}Run {r['run_index']} [{r['run_type']}] "
+                            f"status={r['status']} "
+                            f"latency={r['latency_sec']:.4f}s "
+                            f"e2e={r.get('end_to_end_ms', 'N/A')}ms "
+                            f"overhead={r.get('overhead_ms', 'N/A')}ms"
+                        )
+                        if r["status"] != "success":
+                            print(f"    error: {r['error']}")
+                    summary = summarize(rows)
+                    print(f"  Cold-start latency:           {summary['cold_start_latency_sec']}")
+                    print(f"  Steady-state avg latency:     {summary['steady_state_avg_latency_sec']}")
+                    print(f"  Steady-state avg e2e ms:      {summary['steady_state_avg_end_to_end_ms']}")
+                    print(f"  Steady-state avg overhead ms: {summary['steady_state_avg_overhead_ms']}")
+                    log_to_wandb(workflow, rows, summary, config, run_tag=mode)
+                    write_json(
+                        OUTPUT_DIR / f"{workflow}_{mode}_{config['dataset_label']}_{timestamp}.json",
+                        rows,
+                    )
+                    write_csv(
+                        OUTPUT_DIR / f"{workflow}_{mode}_{config['dataset_label']}_{timestamp}.csv",
+                        rows,
+                    )
+                    write_json(
+                        OUTPUT_DIR
+                        / f"{workflow}_{mode}_summary_{config['dataset_label']}_{timestamp}.json",
+                        summary,
+                    )
+                    dataset_rows.extend(rows)
+                    all_rows.extend(rows)
+                    print()
+            finally:
+                if args.transport == "stdio":
+                    exit_stdio()
 
         write_json(
             OUTPUT_DIR / f"all_benchmarks_{config['dataset_label']}_{timestamp}.json",
