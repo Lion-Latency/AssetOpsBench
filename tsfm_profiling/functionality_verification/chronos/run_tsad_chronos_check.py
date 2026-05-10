@@ -22,7 +22,7 @@ if getattr(forecast["result"], "status", None) == "success" and hasattr(
     forecast["result"], "results_file"
 ):
     tsad_result = run_tsad_chronos(
-        dataset_path=str(forecast["subset_dataset_path"]),
+        dataset_path=str(forecast["SOURCE_DATASET_PATH"]),
         tsfm_output_json=forecast["result"].results_file,
         timestamp_column=forecast["TIMESTAMP_COLUMN"],
         target_columns=[forecast["TARGET_COLUMN"]],
@@ -30,6 +30,7 @@ if getattr(forecast["result"], "status", None) == "success" and hasattr(
         task="fit",
         false_alarm=0.05,
         n_calibration=0.2,
+        frequency_sampling="15_minutes",
     )
 
     status = getattr(tsad_result, "status", None)

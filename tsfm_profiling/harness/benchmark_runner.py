@@ -95,7 +95,7 @@ MODES = {
     "compile":       {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1",
                       "TSFM_COMPILE": "1", "TSFM_FAST_TRAINER": "1"},
     "all_inference": {"TSFM_CACHE_ENABLED": "1", "TSFM_MODEL_CACHE": "1",
-                      "TSFM_BF16": "1", "TSFM_COMPILE": "1",
+                      "TSFM_BF16": "1", "TSFM_COMPILE": "0",
                       "TSFM_FAST_TRAINER": "1"},
 }
 

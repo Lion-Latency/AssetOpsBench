@@ -769,6 +769,11 @@ class Chronos(InterchangeableModelInterface):
         freq = f"{frequency_minutes}min"
         predict_df[timestamp_column] = parsed_timestamps.dt.round(freq)
         predict_df = predict_df.sort_values([source_id_column, timestamp_column])
+        # Drop duplicate timestamps per series that can arise from frequency rounding;
+        # pd.infer_freq returns None on windows with duplicate timestamps.
+        predict_df = predict_df.drop_duplicates(
+            subset=[source_id_column, timestamp_column], keep="last"
+        ).reset_index(drop=True)
 
         if self.model is None:
             self.load_model(self.model_checkpoint)
