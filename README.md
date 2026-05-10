@@ -66,7 +66,7 @@ Our work targets both inference and training performance by instrumenting the pi
 
 ### Headline Result
 
-We developed a reproducible benchmarking harness and interchangeable model interface for the TSFM MCP server, enabling profiling-driven optimizations including preprocessing parallelism, caching, AMP optimization, and Chronos integration while improving end-to-end pipeline efficiency.
+As part of the IBM AssetOpsBench project, our team developed a reproducible benchmarking harness, stage-level profiling system, and interchangeable model interface that identified preprocessing and inference bottlenecks, achieving up to 12.8× faster forecasting and 12.2% lower fine-tuning latency while supporting forecasting, fine-tuning, and anomaly detection workflows.
 
 ---
 
