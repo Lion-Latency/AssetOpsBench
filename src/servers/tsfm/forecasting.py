@@ -589,27 +589,26 @@ def _get_ttm_hf_inference(
         model = _resolve_inference_model(model_checkpoint, forecast_horizon)
 
         if not _opt_fast_trainer():
-            # remove_unused_columns=False + tensor-only collator + label_names:
-            # OptimizedModule (torch.compile, opt #2) wraps the model in a
-            # forward signature of (*args, **kwargs). Trainer's column-pruning
-            # would otherwise strip every TTM input key (past_values,
-            # future_values, freq_token, …), producing an empty batch and
-            # ValueError at predict time. Same opaque signature also defeats
-            # label detection, so loss leaks into predictions[0]; naming
-            # `future_values` as a label key restores the expected shape.
-            args = TrainingArguments(
+            # The remove_unused_columns / label_names / tensor-only collator
+            # workarounds are ONLY needed when torch.compile (opt #2) wraps
+            # the model in OptimizedModule (forward sig becomes
+            # `(*args, **kwargs)`, breaking Trainer's column pruning + label
+            # detection). Applied unconditionally they regress the legacy
+            # Trainer path on single-column + id_columns workloads (TSAD's
+            # per-column forecast loop), where tsfm_public's windowed
+            # dataset returns `self.y = None` for some segments and the
+            # custom collator path hits AttributeError. Scope to compile-only.
+            ta_kwargs = dict(
                 output_dir="./output",
                 logging_dir="./log",
                 report_to="none",  # avoid wandb login conflict w harness
-                remove_unused_columns=False,
-                label_names=["future_values"],
             )
-            trainer = Trainer(
-                model=model,
-                args=args,
-                eval_dataset=dataset_inference,
-                data_collator=_collate_tensor_only,
-            )
+            tr_kwargs = dict(model=model, eval_dataset=dataset_inference)
+            if _opt_compile():
+                ta_kwargs["remove_unused_columns"] = False
+                ta_kwargs["label_names"] = ["future_values"]
+                tr_kwargs["data_collator"] = _collate_tensor_only
+            trainer = Trainer(args=TrainingArguments(**ta_kwargs), **tr_kwargs)
         else:
             trainer = None
 
@@ -696,7 +695,7 @@ _DEFAULT_TRAINING_ARGUMENTS = {
     "learning_rate": 0.0001,
     "num_train_epochs": 10,
     "do_eval": True,
-    "evaluation_strategy": "epoch", 
+    "eval_strategy": "epoch",  # renamed from `evaluation_strategy` in transformers ≥ 4.46
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
     "save_strategy": "epoch",
@@ -705,6 +704,9 @@ _DEFAULT_TRAINING_ARGUMENTS = {
     "load_best_model_at_end": True,
     "metric_for_best_model": "eval_loss",
     "greater_is_better": False,
+    # adding and disabling the following args to avoid stdio deadlock issues
+    "report_to": "none",
+    "disable_tqdm": True,
 }
 
 
@@ -717,7 +719,7 @@ def _ttm_main_config():
         "patch_length": 64,
         "forecast_horizon": 96,
         "batch_size": 32,
-        "num_workers": 4,
+        "num_workers": 0,  # 0 to avoid forking dataloader workers under MCP stdio
         "seed": 42,
         "model_type": "ttm",
         "optim": "AdamW",
@@ -731,6 +733,26 @@ def _ttm_main_config():
         "decoder_mode": "mix_channel",
         "head_dropout": 0.7,
     }
+
+
+@_contextlib.contextmanager
+def _redirect_stdout_to_stderr():
+    """Send anything `print()` writes to stderr instead.
+
+    Required because tsfm_public's `TrackingCallback` and HF Trainer's
+    epoch logger both write Python dict reprs to stdout. When this server
+    runs as a subprocess driven over MCP stdio, stdout is the JSON-RPC
+    channel — every stray `print` becomes a parse error on the client and
+    risks corrupting in-flight responses. stderr is forwarded harmlessly.
+    """
+    import sys
+
+    saved = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = saved
 
 
 def _finetune_ttm_hf(
@@ -913,9 +935,10 @@ def _finetune_ttm_hf(
     if n_finetune > 0:
         if lr <= 0:
             try:
-                lr, finetune_forecast_model = optimal_lr_finder(
-                    finetune_forecast_model, train_dataset, batch_size=batch_size
-                )
+                with _redirect_stdout_to_stderr():
+                    lr, finetune_forecast_model = optimal_lr_finder(
+                        finetune_forecast_model, train_dataset, batch_size=batch_size
+                    )
                 if lr <= 0:
                     lr = 0.0001
             except Exception:
@@ -972,12 +995,14 @@ def _finetune_ttm_hf(
     )
 
     # ── Stage: training ──────────────────────────────────────────────────
-    with stage_timer("training", metrics):
+    # Trainer's epoch logger + tsfm_public's TrackingCallback both `print()`
+    # to stdout. Under MCP stdio that's the JSON-RPC channel — silence them.
+    with stage_timer("training", metrics), _redirect_stdout_to_stderr():
         if n_finetune > 0:
             finetune_forecast_trainer.train()
 
     # ── Stage: evaluation ─────────────────────────────────────────────────
-    with stage_timer("evaluation", metrics):
+    with stage_timer("evaluation", metrics), _redirect_stdout_to_stderr():
         dataset_eval: dict = {}
         if n_finetune > 0:
             dataset_eval["train"] = train_dataset

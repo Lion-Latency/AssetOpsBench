@@ -158,14 +158,14 @@ class _TSADWeightedConformalWrapper:
         if self.threshold_function == "weighting":
             if len(cal_weights.shape) == 1:
                 score_threshold = _weighted_conformal_quantile(
-                    np.append(cal_scores, np.array([np.infty]), axis=0),
+                    np.append(cal_scores, np.array([np.inf]), axis=0),
                     np.append(cal_weights, np.array([1]), axis=0),
                     alpha=false_alarm,
                 )
             else:
                 for i in range(cal_weights.shape[0]):
                     st_i = _weighted_conformal_quantile(
-                        np.append(cal_scores, np.array([np.infty]), axis=0),
+                        np.append(cal_scores, np.array([np.inf]), axis=0),
                         np.append(cal_weights[i, :], np.array([1]), axis=0),
                         alpha=false_alarm,
                     )
@@ -208,7 +208,7 @@ class _TSADWeightedConformalWrapper:
             test_outliers = np.array(test_scores > score_threshold).astype("int")
             test_ad_scores = [
                 _weighted_conformal_alpha(
-                    np.append(self.cal_scores, np.array([np.infty]), axis=0),
+                    np.append(self.cal_scores, np.array([np.inf]), axis=0),
                     np.append(cal_weights, np.array([1]), axis=0),
                     score,
                 )

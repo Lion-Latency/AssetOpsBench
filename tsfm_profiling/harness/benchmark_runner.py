@@ -609,16 +609,20 @@ def bench_integrated_tsad(config, mode):
 
 
 def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None):
+    # Pull from the module global rather than threading through every bench fn;
+    # `set_transport` (called once in main()) is the single source of truth.
+    transport = _TRANSPORT
     run = wandb.init(
         entity=WANDB_ENTITY,
         project=WANDB_PROJECT,
         name=(
-            f"bench_{workflow}_{config.get('dataset_label')}_{run_tag}_"
+            f"bench_{workflow}_{config.get('dataset_label')}_{transport}_{run_tag}_"
             f"{time.strftime('%Y%m%d_%H%M%S')}"
         ),
         config={
             "workflow": workflow,
             "mode": mode,
+            "transport": transport,
             "cache_enabled": os.environ.get("TSFM_CACHE_ENABLED"),
             "preprocess_opt": os.environ.get("TSFM_PREPROCESS_OPT"),
             "preprocess_workers": os.environ.get("TSFM_PREPROCESS_WORKERS"),
@@ -633,6 +637,7 @@ def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None)
             "dataset_rows": config.get("dataset_rows"),
             "run_tag": run_tag,
         },
+        tags=[transport, mode] if mode else [transport],
         reinit="finish_previous",
     )
 
