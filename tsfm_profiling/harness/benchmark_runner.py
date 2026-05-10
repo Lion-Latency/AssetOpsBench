@@ -55,6 +55,7 @@ from src.servers.tsfm.main import (
     run_integrated_tsad_chronos,
 )
 from tsfm_profiling.harness._stdio_client import StdioBenchClient, shim_result
+from tsfm_profiling.harness import _plots
 
 # Maps MCP tool name -> in-process callable. Used by `_invoke_tool` when
 # `--transport in_process` so we keep one dispatch site for both transports.
@@ -686,6 +687,14 @@ def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None)
                 continue
             keys.append(f"run{run_idx}")
             ys.append(series)
+
+        if ys:
+            mean_series = [
+                float(np.nanmean([y[i] for y in ys])) for i in range(len(all_h))
+            ]
+            if any(np.isfinite(v) for v in mean_series):
+                keys.append("mean")
+                ys.append(mean_series)
         if not keys:
             continue
         run.log({
@@ -697,6 +706,17 @@ def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None)
                 xname="forecast_horizon",
             )
         })
+
+   
+    panels: Dict[str, Any] = {}
+    img_stages = _plots.stage_breakdown_stacked(rows, workflow, mode or run_tag)
+    if img_stages is not None:
+        panels[f"{workflow}/stage_breakdown_stacked"] = img_stages
+    img_cs = _plots.cold_vs_steady_grouped(rows, workflow, mode or run_tag)
+    if img_cs is not None:
+        panels[f"{workflow}/cold_vs_steady"] = img_cs
+    if panels:
+        run.log(panels)
 
     successful_rows = [row for row in rows if row["status"] == "success"]
     aggregate_metrics = {}
@@ -743,6 +763,97 @@ def log_to_wandb(workflow, rows, summary, config, run_tag="baseline", mode=None)
 
     run.finish()
     print(f"  W&B: {run.url}")
+
+
+def log_summary_to_wandb(
+    all_rows: list,
+    modes: list,
+    config: dict,
+    transport: str,
+    run_tag: str = "summary",
+) -> None:
+    if not all_rows:
+        return
+    workflows = sorted({r["workflow"] for r in all_rows if r.get("workflow")})
+    if not workflows:
+        return
+
+    run = wandb.init(
+        entity=WANDB_ENTITY,
+        project=WANDB_PROJECT,
+        name=(
+            f"summary_{config.get('dataset_label', 'dataset')}_"
+            f"{transport}_{time.strftime('%Y%m%d_%H%M%S')}"
+        ),
+        config={
+            "kind": "summary",
+            "transport": transport,
+            "modes": modes,
+            "workflows": workflows,
+            "model_checkpoint": config.get("model_checkpoint"),
+            "dataset": config.get("dataset_label"),
+            "dataset_path": config.get("dataset_path"),
+            "run_tag": run_tag,
+        },
+        reinit="finish_previous",
+        tags=["summary", transport],
+    )
+
+    for workflow in workflows:
+        rows_by_mode = {}
+        for m in modes:
+            rs = [
+                r for r in all_rows
+                if r.get("workflow") == workflow and r.get("mode") == m
+            ]
+            if rs:
+                rows_by_mode[m] = rs
+        if not rows_by_mode:
+            continue
+
+        panels: Dict[str, Any] = {}
+        img = _plots.cross_mode_latency(rows_by_mode, workflow)
+        if img is not None:
+            panels[f"{workflow}/cross_mode_latency"] = img
+        img = _plots.cross_mode_stage_breakdown(rows_by_mode, workflow)
+        if img is not None:
+            panels[f"{workflow}/cross_mode_stage_breakdown"] = img
+        img = _plots.cross_mode_gpu_power(rows_by_mode, workflow, stage="inference")
+        if img is not None:
+            panels[f"{workflow}/cross_mode_gpu_power_inference"] = img
+        if panels:
+            run.log(panels)
+
+        # Horizon perf: one line per mode, one chart per metric.
+        horizon_data = _plots.cross_mode_horizon_perf(rows_by_mode, workflow)
+        for base, (xs, mode_series) in horizon_data.items():
+            if not xs or not mode_series:
+                continue
+            keys = list(mode_series.keys())
+            ys = [mode_series[k] for k in keys]
+            run.log({
+                f"{workflow}/cross_mode_perf_{base}": wandb.plot.line_series(
+                    xs=xs,
+                    ys=ys,
+                    keys=keys,
+                    title=f"{workflow} {base} across modes",
+                    xname="forecast_horizon",
+                )
+            })
+
+        # Mode -> mean latency scalars also written to summary so the W&B
+        # auto-table compares them at a glance.
+        for m, rs in rows_by_mode.items():
+            succ = [r["latency_sec"] for r in rs if r.get("status") == "success"]
+            if succ:
+                run.summary[f"{workflow}/{m}/mean_latency_sec"] = mean(succ)
+            e2e = [r["end_to_end_ms"] for r in rs
+                   if r.get("status") == "success" and r.get("end_to_end_ms") is not None]
+            if e2e:
+                run.summary[f"{workflow}/{m}/mean_e2e_ms"] = mean(e2e)
+
+    run.finish()
+    print(f"  W&B summary: {run.url}")
 
 
 def bench_forecasting_chronos(config, mode):
@@ -1015,6 +1126,17 @@ def main():
 
     write_json(OUTPUT_DIR / f"all_benchmarks_sweep_{timestamp}.json", all_rows)
     write_csv(OUTPUT_DIR / f"all_benchmarks_sweep_{timestamp}.csv", all_rows)
+
+    if len(modes) > 1:
+        try:
+            log_summary_to_wandb(
+                all_rows=all_rows,
+                modes=modes,
+                config=base_config | (dataset_configs[-1] if dataset_configs else {}),
+                transport=args.transport,
+            )
+        except Exception as exc:
+            print(f"  [warn] summary W&B run failed: {exc!r}")
 
     print("=" * 72)
     print(f"Results saved to: {OUTPUT_DIR}")
