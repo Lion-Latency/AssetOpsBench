@@ -198,7 +198,7 @@ TSFM_BENCH_MODES=combined python tsfm_profiling/harness/benchmark_runner.py
 
 Public W&B dashboard:
 
-🔗 https://wandb.ai/lion-latency/hpml-project
+🔗 https://wandb.ai/lion-latency/hpml-project-final
 
 The dashboard includes:
 
