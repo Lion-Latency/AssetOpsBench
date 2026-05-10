@@ -22,7 +22,7 @@
 - **GitHub repository:** https://github.com/Lion-Latency/AssetOpsBench
 - **Final report:** `deliverables/HPML_Final_Report.pdf`
 - **Final presentation:** `deliverables/HPML_Final_Presentation.pptx`
-- **Experiment-tracking dashboard:** https://wandb.ai/lion-latency/hpml-project
+- **Experiment-tracking dashboard:** https://wandb.ai/lion-latency/hpml-project-final
 
 The final report PDF and presentation file are checked into the `deliverables/` folder of this repository and uploaded to CourseWorks.
 
