@@ -285,7 +285,7 @@ class TTM(InterchangeableModelInterface):
             "learning_rate": 0.0001,
             "num_train_epochs": 10,
             "do_eval": True,
-            "evaluation_strategy": "epoch",
+            "eval_strategy": "epoch",  # renamed from `evaluation_strategy` in transformers ≥ 4.46
             "per_device_train_batch_size": 32,
             "per_device_eval_batch_size": 32,
             "save_strategy": "epoch",

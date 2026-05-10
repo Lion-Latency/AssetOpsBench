@@ -31,6 +31,7 @@ result = run_integrated_tsad_chronos(
     model_checkpoint="amazon/chronos-2",
     false_alarm=0.05,
     n_calibration=0.2,
+    frequency_sampling="15_minutes",
 )
 
 status = getattr(result, "status", None)

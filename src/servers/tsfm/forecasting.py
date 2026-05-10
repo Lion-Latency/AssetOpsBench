@@ -2,6 +2,16 @@
 
 Heavy ML dependencies (tsfm_public, transformers, torch) are imported lazily
 so the module can be imported even when they are absent.
+
+Inference optimization flags (env vars, default off → existing behavior):
+    TSFM_MODEL_CACHE   "1" → lru_cache the TTM model load (opt #1)
+    TSFM_COMPILE       "1" → wrap cached model w/ torch.compile (opt #2)
+    TSFM_BF16          "1" → cast cached model to bfloat16 on CUDA (opt #3)
+    TSFM_FAST_TRAINER  "1" → bypass HF Trainer w/ direct inference loop (opt #4)
+
+Disjoint from the preprocessing/parallelism flags handled by `cache.py` and
+`parallel.py` (TSFM_CACHE_ENABLED, TSFM_PREPROCESS_OPT, …). Finetuning path
+is intentionally untouched by these inference flags.
 """
 
 from __future__ import annotations
@@ -10,10 +20,12 @@ import math
 import os
 import pickle
 import time
-import yaml
+from functools import lru_cache
+from typing import Optional
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from . import cache as _cache
 from . import parallel as _parallel
@@ -25,6 +37,281 @@ from .dataquality import (
 )
 from .io import _make_json_compatible
 from .metrics import _METRICS_FORECAST, _TSFREQUENCY_TOLERANCE, _freq_token_to_minutes
+
+
+# ── Inference optimization flag readers ──────────────────────────────────────
+
+
+def _flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default) == "1"
+
+
+def _opt_model_cache() -> bool:
+    return _flag("TSFM_MODEL_CACHE")
+
+
+def _opt_compile() -> bool:
+    return _flag("TSFM_COMPILE")
+
+
+def _opt_bf16() -> bool:
+    return _flag("TSFM_BF16")
+
+
+def _opt_fast_trainer() -> bool:
+    return _flag("TSFM_FAST_TRAINER")
+
+
+# ── Cached model loader (opts #1 / #2 / #3) ──────────────────────────────────
+
+
+@lru_cache(maxsize=4)
+def _load_ttm_for_inference_cached(
+    model_checkpoint: str,
+    prediction_filter_length: int,
+    bf16: bool,
+    compile_mode: Optional[str],
+    device: str,
+):
+    """Load a TTM model once per (checkpoint, horizon, dtype, compile, device).
+
+    Cached output is treated as a read-only template; callers must not call
+    Trainer training utilities on the returned instance. The fast-trainer
+    path (opt #4) only reads.
+    """
+    import torch
+    from tsfm_public import TinyTimeMixerForPrediction
+
+    model = TinyTimeMixerForPrediction.from_pretrained(
+        model_checkpoint, prediction_filter_length=prediction_filter_length
+    )
+    model.eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    if bf16 and torch.cuda.is_available():
+        model = model.to(dtype=torch.bfloat16)
+    if device == "cuda" and torch.cuda.is_available():
+        model = model.to("cuda")
+    if compile_mode is not None and torch.cuda.is_available():
+        # mode="default": Inductor fusions only, no CUDA Graphs.
+        # "reduce-overhead" captures graphs that reuse output buffers across
+        # batches; HF Trainer concatenates per-batch outputs on GPU and trips
+        # "accessing tensor output of CUDAGraphs that has been overwritten".
+        model = torch.compile(model, mode=compile_mode, fullgraph=False)
+    return model
+
+
+def _resolve_inference_model(model_checkpoint: str, prediction_filter_length: int):
+    """Return a TTM model honoring opt flags. No flags → fresh load (legacy)."""
+    import torch
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    any_opt = _opt_model_cache() or _opt_compile() or _opt_bf16()
+
+    if not any_opt:
+        from tsfm_public import TinyTimeMixerForPrediction
+
+        model = TinyTimeMixerForPrediction.from_pretrained(
+            model_checkpoint, prediction_filter_length=prediction_filter_length
+        )
+        if device == "cuda":
+            model = model.to("cuda")
+        return model
+
+    compile_mode = "default" if _opt_compile() else None
+    return _load_ttm_for_inference_cached(
+        model_checkpoint=model_checkpoint,
+        prediction_filter_length=prediction_filter_length,
+        bf16=_opt_bf16(),
+        compile_mode=compile_mode,
+        device=device,
+    )
+
+
+def _bf16_autocast_ctx():
+    """Autocast bf16 on CUDA when opt #3 is on; harmless no-op otherwise.
+
+    Trainer's eval loop feeds fp32 input batches; the cached model has been
+    cast to bf16 by `_load_ttm_for_inference_cached`, so without autocast
+    the first F.linear call raises a dtype-mismatch error.
+    """
+    import contextlib
+
+    import torch
+
+    if _opt_bf16() and torch.cuda.is_available():
+        return torch.autocast("cuda", dtype=torch.bfloat16)
+    return contextlib.nullcontext()
+
+
+# ── Optional inference profilers (env-gated; harness-driven) ─────────────────
+
+
+import contextlib as _contextlib
+
+
+@_contextlib.contextmanager
+def _torch_profile_ctx():
+    """Wrap the inference stage with torch.profiler when the harness enables it.
+
+    Active iff `TSFM_TORCH_PROFILE_DIR` is set. Writes one tensorboard-format
+    trace per call into a unique subdir so multiple iters in the same bench
+    run don't collide. No-op (yields None) when unset.
+    """
+    d = os.environ.get("TSFM_TORCH_PROFILE_DIR")
+    if not d:
+        yield None
+        return
+    try:
+        import torch
+        from torch.profiler import (
+            ProfilerActivity,
+            profile as _torch_profile,
+            tensorboard_trace_handler,
+        )
+    except Exception:
+        yield None
+        return
+    os.makedirs(d, exist_ok=True)
+    activities = [ProfilerActivity.CPU]
+    if torch.cuda.is_available():
+        activities.append(ProfilerActivity.CUDA)
+    out_subdir = os.path.join(d, f"trace_{time.time_ns()}")
+    with _torch_profile(
+        activities=activities,
+        on_trace_ready=tensorboard_trace_handler(out_subdir),
+        record_shapes=False,
+        with_stack=False,
+    ) as prof:
+        yield prof
+        # Single call = single profiling step. Without this `step()` the
+        # tensorboard handler never fires.
+        prof.step()
+
+
+@_contextlib.contextmanager
+def _cprofile_ctx():
+    """Capture cProfile stats for the inference stage when the harness enables it.
+
+    Active iff `TSFM_CPROFILE_DIR` is set. Dumps one `.prof` per call (load
+    later with `pstats.Stats(path)`). No-op when unset.
+    """
+    d = os.environ.get("TSFM_CPROFILE_DIR")
+    if not d:
+        yield None
+        return
+    import cProfile
+
+    os.makedirs(d, exist_ok=True)
+    p = cProfile.Profile()
+    p.enable()
+    try:
+        yield p
+    finally:
+        p.disable()
+        try:
+            p.dump_stats(os.path.join(d, f"prof_{time.time_ns()}.prof"))
+        except Exception:
+            # Profiler dump must never crash the tool call.
+            pass
+
+
+# ── Shared collator (Trainer path + fast-trainer path) ───────────────────────
+
+
+def _collate_tensor_only(batch):
+    """Stack tensor-valued keys; drop non-tensor keys (id, timestamp, …).
+
+    Required for the Trainer path when `remove_unused_columns=False`: the
+    default collator would trip on string/datetime columns and TTM forward
+    would receive surprise kwargs.
+    """
+    import torch
+
+    out = {}
+    for k in batch[0].keys():
+        vals = [b[k] for b in batch]
+        if all(isinstance(v, torch.Tensor) for v in vals):
+            out[k] = torch.stack(vals)
+    return out
+
+
+# ── Opt #4: fast inference loop (bypass HF Trainer) ──────────────────────────
+
+
+def _predict_fast(model, dataset, batch_size: int = 64) -> np.ndarray:
+    """Single forward pass over `dataset` w/o constructing an HF Trainer.
+
+    Returns predictions stacked as shape `[N, prediction_length, num_features]`,
+    matching `Trainer.predict(...).predictions[0]`.
+    """
+    import torch
+    from torch.utils.data import DataLoader
+
+    eff_device = "cuda" if torch.cuda.is_available() else "cpu"
+    model_dtype = next(
+        (p.dtype for p in model.parameters() if p.is_floating_point()),
+        torch.float32,
+    )
+
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        pin_memory=(eff_device == "cuda"),
+        collate_fn=_collate_tensor_only,
+    )
+    preds = []
+    with torch.inference_mode():
+        for batch in loader:
+            for k, v in list(batch.items()):
+                v = v.to(eff_device, non_blocking=(eff_device == "cuda"))
+                if v.is_floating_point():
+                    v = v.to(model_dtype)
+                batch[k] = v
+            out = model(**batch)
+            tensor = getattr(out, "prediction_outputs", None)
+            if tensor is None and isinstance(out, (tuple, list)):
+                tensor = out[0]
+            preds.append(tensor.detach().to(torch.float32).cpu())
+    return torch.cat(preds, dim=0).numpy()
+
+
+def _gt_pred_from_predictions(
+    predictions_first,
+    dataset,
+    ix_target_features,
+    inverse_transforms=None,
+):
+    """Mirror of `_get_gt_and_predictions` but reusing an already-computed
+    output array. Avoids the redundant `trainer.predict` second pass that
+    the Trainer-based path performs.
+    """
+    if inverse_transforms is None:
+        inverse_transforms = []
+    target_value_list = []
+    pred_value_list = []
+    timestamp_id_value_dic: dict = {}
+    for i in range(len(dataset)):
+        future_vals = dataset[i]["future_values"]
+        if hasattr(future_vals, "detach"):
+            future_vals = future_vals.detach().cpu().numpy()
+        aux = future_vals[:, ix_target_features]
+        if "timestamp" in dataset[i]:
+            timestamp_id_value_dic.setdefault("timestamp", []).append(dataset[i]["timestamp"])
+        if "id" in dataset[i]:
+            timestamp_id_value_dic.setdefault("id", []).extend(list(dataset[i]["id"]))
+        target_value_list.append(aux)
+        forecast_h = aux.shape[0]
+        aux_pred = predictions_first[i, :forecast_h, ix_target_features].transpose()
+        pred_value_list.append(aux_pred)
+    y_gt = np.array(target_value_list)
+    y_pred = np.array(pred_value_list)
+    for ix_fhorizon in range(y_gt.shape[1]):
+        if inverse_transforms:
+            y_gt[:, ix_fhorizon, :] = inverse_transforms[0](y_gt[:, ix_fhorizon, :])
+            y_pred[:, ix_fhorizon, :] = inverse_transforms[0](y_pred[:, ix_fhorizon, :])
+    return y_gt, y_pred, timestamp_id_value_dic
 
 
 # ── TSFM data quality filter ──────────────────────────────────────────────────
@@ -130,7 +417,8 @@ def _get_gt_and_predictions(
 ):
     if inverse_transforms is None:
         inverse_transforms = []
-    outputs = trainer.predict(dataset)
+    with _bf16_autocast_ctx():
+        outputs = trainer.predict(dataset)
     target_value_list = []
     pred_value_list = []
     timestamp_id_value_dic: dict = {}
@@ -228,7 +516,6 @@ def _get_ttm_hf_inference(
     forecast_horizon=-1,
     metrics=None,
 ):
-    from tsfm_public import TinyTimeMixerForPrediction
     from tsfm_public.toolkit.time_series_preprocessor import (
         TimeSeriesPreprocessor,
         get_datasets,
@@ -296,20 +583,51 @@ def _get_ttm_hf_inference(
 
     # ── Stage: model_loading ──────────────────────────────────────────────
     with stage_timer("model_loading", metrics):
-        model = TinyTimeMixerForPrediction.from_pretrained(
-            model_checkpoint, prediction_filter_length=forecast_horizon
-        )
-        args = TrainingArguments(output_dir="./output", logging_dir="./log", report_to="none") # report_to var set to avoid wandb login conflict w harness
-        trainer = Trainer(model=model, args=args, eval_dataset=dataset_inference)
+        # Opts #1/#2/#3: env-flag dispatched (cache, compile, bf16). With all
+        # flags off this is a fresh `TinyTimeMixerForPrediction.from_pretrained`
+        # equivalent to the legacy path.
+        model = _resolve_inference_model(model_checkpoint, forecast_horizon)
+
+        if not _opt_fast_trainer():
+            # The remove_unused_columns / label_names / tensor-only collator
+            # workarounds are ONLY needed when torch.compile (opt #2) wraps
+            # the model in OptimizedModule (forward sig becomes
+            # `(*args, **kwargs)`, breaking Trainer's column pruning + label
+            # detection). Applied unconditionally they regress the legacy
+            # Trainer path on single-column + id_columns workloads (TSAD's
+            # per-column forecast loop), where tsfm_public's windowed
+            # dataset returns `self.y = None` for some segments and the
+            # custom collator path hits AttributeError. Scope to compile-only.
+            ta_kwargs = dict(
+                output_dir="./output",
+                logging_dir="./log",
+                report_to="none",  # avoid wandb login conflict w harness
+            )
+            tr_kwargs = dict(model=model, eval_dataset=dataset_inference)
+            if _opt_compile():
+                ta_kwargs["remove_unused_columns"] = False
+                ta_kwargs["label_names"] = ["future_values"]
+                tr_kwargs["data_collator"] = _collate_tensor_only
+            trainer = Trainer(args=TrainingArguments(**ta_kwargs), **tr_kwargs)
+        else:
+            trainer = None
 
     # ── Stage: inference ──────────────────────────────────────────────────
-    with stage_timer("inference", metrics):
+    with stage_timer("inference", metrics), _torch_profile_ctx(), _cprofile_ctx():
         ix_target_features = list(
             np.arange(len(dataset_config_dictionary["column_specifiers"]["target_columns"]))
         )
 
-        outputs = trainer.predict(dataset_inference)
-        y_pred = outputs.predictions[0][:, :forecast_horizon, ix_target_features]
+        if _opt_fast_trainer():
+            # Opt #4: bypass HF Trainer; one forward pass shared by predictions + perf.
+            raw_pred = _predict_fast(model, dataset_inference)
+            outputs_predictions_first = raw_pred
+            y_pred = raw_pred[:, :forecast_horizon, ix_target_features]
+        else:
+            with _bf16_autocast_ctx():
+                outputs = trainer.predict(dataset_inference)
+            outputs_predictions_first = outputs.predictions[0]
+            y_pred = outputs_predictions_first[:, :forecast_horizon, ix_target_features]
 
         if tsp.scaling:
             for ixf in range(y_pred.shape[1]):
@@ -345,12 +663,22 @@ def _get_ttm_hf_inference(
     if scaling:
         inverse_transforms.append(tsp.target_scaler_dict["0"].inverse_transform)
 
-    y_gt, y_pred_eval, timestamp_id_value_dic = _get_gt_and_predictions(
-        trainer,
-        dataset_inference,
-        ix_target_features=ix_target_features,
-        inverse_transforms=inverse_transforms,
-    )
+    if _opt_fast_trainer():
+        # Reuse the single forward pass from `_predict_fast` — no second
+        # `trainer.predict` call (the legacy path runs forward twice).
+        y_gt, y_pred_eval, timestamp_id_value_dic = _gt_pred_from_predictions(
+            outputs_predictions_first,
+            dataset_inference,
+            ix_target_features=ix_target_features,
+            inverse_transforms=inverse_transforms,
+        )
+    else:
+        y_gt, y_pred_eval, timestamp_id_value_dic = _get_gt_and_predictions(
+            trainer,
+            dataset_inference,
+            ix_target_features=ix_target_features,
+            inverse_transforms=inverse_transforms,
+        )
     target_columns = dataset_config_dictionary["column_specifiers"]["target_columns"]
     pd_performance = _get_performance(
         y_gt, y_pred_eval, target_columns=target_columns, prediction=False
@@ -367,7 +695,7 @@ _DEFAULT_TRAINING_ARGUMENTS = {
     "learning_rate": 0.0001,
     "num_train_epochs": 10,
     "do_eval": True,
-    "evaluation_strategy": "epoch", 
+    "eval_strategy": "epoch",  # renamed from `evaluation_strategy` in transformers ≥ 4.46
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
     "save_strategy": "epoch",
@@ -376,6 +704,9 @@ _DEFAULT_TRAINING_ARGUMENTS = {
     "load_best_model_at_end": True,
     "metric_for_best_model": "eval_loss",
     "greater_is_better": False,
+    # adding and disabling the following args to avoid stdio deadlock issues
+    "report_to": "none",
+    "disable_tqdm": True,
 }
 
 
@@ -388,7 +719,7 @@ def _ttm_main_config():
         "patch_length": 64,
         "forecast_horizon": 96,
         "batch_size": 32,
-        "num_workers": 4,
+        "num_workers": 0,  # 0 to avoid forking dataloader workers under MCP stdio
         "seed": 42,
         "model_type": "ttm",
         "optim": "AdamW",
@@ -402,6 +733,26 @@ def _ttm_main_config():
         "decoder_mode": "mix_channel",
         "head_dropout": 0.7,
     }
+
+
+@_contextlib.contextmanager
+def _redirect_stdout_to_stderr():
+    """Send anything `print()` writes to stderr instead.
+
+    Required because tsfm_public's `TrackingCallback` and HF Trainer's
+    epoch logger both write Python dict reprs to stdout. When this server
+    runs as a subprocess driven over MCP stdio, stdout is the JSON-RPC
+    channel — every stray `print` becomes a parse error on the client and
+    risks corrupting in-flight responses. stderr is forwarded harmlessly.
+    """
+    import sys
+
+    saved = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = saved
 
 
 def _finetune_ttm_hf(
@@ -584,9 +935,10 @@ def _finetune_ttm_hf(
     if n_finetune > 0:
         if lr <= 0:
             try:
-                lr, finetune_forecast_model = optimal_lr_finder(
-                    finetune_forecast_model, train_dataset, batch_size=batch_size
-                )
+                with _redirect_stdout_to_stderr():
+                    lr, finetune_forecast_model = optimal_lr_finder(
+                        finetune_forecast_model, train_dataset, batch_size=batch_size
+                    )
                 if lr <= 0:
                     lr = 0.0001
             except Exception:
@@ -643,12 +995,14 @@ def _finetune_ttm_hf(
     )
 
     # ── Stage: training ──────────────────────────────────────────────────
-    with stage_timer("training", metrics):
+    # Trainer's epoch logger + tsfm_public's TrackingCallback both `print()`
+    # to stdout. Under MCP stdio that's the JSON-RPC channel — silence them.
+    with stage_timer("training", metrics), _redirect_stdout_to_stderr():
         if n_finetune > 0:
             finetune_forecast_trainer.train()
 
     # ── Stage: evaluation ─────────────────────────────────────────────────
-    with stage_timer("evaluation", metrics):
+    with stage_timer("evaluation", metrics), _redirect_stdout_to_stderr():
         dataset_eval: dict = {}
         if n_finetune > 0:
             dataset_eval["train"] = train_dataset
