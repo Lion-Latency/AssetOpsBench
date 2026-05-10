@@ -38,16 +38,16 @@ Our work targets both inference and training performance by instrumenting the pi
 
 # 2. Model/Application Description
 
-- **Application:** TSFM MCP Server (IBM AssetOpsBench)
-- **Models:** TinyTimeMixer (TTM) and Amazon Chronos
+- **Model architecture:**
+  - **Models Tested:** TinyTimeMixer (TTM) and Amazon Chronos
+  - **Application:** TSFM MCP Server (IBM AssetOpsBench)
 - **Framework:** PyTorch 2.x + Hugging Face Transformers
-- **Dataset:** Synthetic Chiller 9 verification dataset and real HVAC asset datasets
+- **Dataset:** Synthetic Chiller 9 verification dataset and real HVAC asset datasets. (Relevant sample included in repo.)
+- **Custom layers or modifications:**
+  - Created an external benchmarking harness that produces reproducible benchmarks with optimizations for the AssetOpsBench TSFM MCP Server. The purpose of this harness is to drive experiments, collects measurements, and log results to Weights & Biases.
+  - Created an internal instrumentation layer injected into the TSFM MCP server code for per-stage profiling.
+  - Created an interchangeable model interface to introduce the ability to swap time-series models for performance comparisons of the AssetOpsBench TSFM MCP Server with models other than TTM.
 - **Hardware Target:** NVIDIA L4 GPU on Google Cloud Platform
-- **Optimization Targets:**
-  - Preprocessing bottlenecks
-  - GPU underutilization
-  - Float32 inference/training overhead
-  - Sequential request processing
 
 ---
 
