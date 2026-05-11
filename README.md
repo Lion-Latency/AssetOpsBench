@@ -30,9 +30,9 @@ The final report PDF and presentation file are checked into the `deliverables/` 
 
 # 1. Problem Statement
 
-This project profiles and optimizes the TSFM MCP server pipeline used in IBM AssetOpsBench. The original system lacked detailed end-to-end profiling, making it difficult to identify latency bottlenecks across forecasting, anomaly detection, and fine-tuning workflows.
+This project profiles and optimizes the TSFM MCP server pipeline used in the IBM AssetOpsBench framework for time-series forecasting, anomaly detection, and fine-tuning workflows. The original system lacked detailed end-to-end instrumentation and reproducible benchmarking, making it difficult to identify latency bottlenecks across preprocessing, model loading, inference, and training stages.
 
-Our work targets both inference and training performance by instrumenting the pipeline, benchmarking performance, and applying optimizations focused on preprocessing overhead, GPU utilization, and mixed precision execution. The goal is to improve latency and throughput while maintaining forecasting accuracy and anomaly detection quality.
+Our work targets both inference and training performance by introducing a stage-level profiling system, external benchmarking harness, and interchangeable model interface for evaluating multiple time-series foundation models. We evaluated preprocessing parallelism, preprocessing caching, model caching, fast trainer configurations, and bfloat16 mixed precision execution to improve latency and throughput while maintaining forecasting accuracy and anomaly detection quality.
 
 ---
 
@@ -53,20 +53,31 @@ Our work targets both inference and training performance by instrumenting the pi
 
 # 3. Final Results Summary
 
-| Metric | Baseline | Optimized | Improvement |
-|---|---|---|---|
-| Forecasting Cold Start | 5.73 s | Reduced | Faster startup |
-| Forecasting Steady State | 0.67 s | Reduced | Lower latency |
-| Fine-Tuning Runtime | 2.76 s | Reduced | Faster training |
-| Integrated TSAD Runtime | 1.35 s | Reduced | Faster pipeline |
-| GPU Utilization | Lower | Improved | Better hardware efficiency |
-| Preprocessing Overhead | High | Reduced | Parallelized + cached |
+| Workflow | Baseline (s) | Best Optimized (s) | Best Optimization | Improvement |
+|---|---:|---:|---|---|
+| Forecasting (TTM) | 46.95 | 31.31 | Fast Trainer | 33.3% faster |
+| Forecasting (Chronos) | 46.95 | 3.67 | Combined Optimizations (1 & 2) | 12.8× faster |
+| Fine-tuning | 12.89 | 11.32 | Parallelism Only | 12.2% faster |
+| TSAD | 109.79 | 107.89 | Cache Only | 1.7% faster |
+| Integrated TSAD | 2335.64 | 1527.30 | Combined Inference (3+4+5) | 34.6% faster |
+
+### Optimization Observations
+
+| Optimization | Main Observation |
+|---|---|
+| Cache Only | Improved TSAD slightly but slowed forecasting and integrated TSAD |
+| Parallelism Only | Produced the best fine-tuning result but regressed TSAD workloads |
+| Cache + Parallelism | Improved fine-tuning slightly but increased integrated TSAD runtime |
+| Model Cache | Regressed performance across all workflows |
+| Fast Trainer | Produced the best TTM forecasting result and major integrated TSAD speedup |
+| bf16 | Improved forecasting and integrated TSAD latency through mixed precision execution |
+| Combined Inference (3+4+5) | Achieved the fastest integrated TSAD result overall |
 
 **Hardware:** NVIDIA L4 GPU, CUDA 12.8, Python 3.12, PyTorch 2.10
 
 ### Headline Result
 
-As part of the IBM AssetOpsBench project, our team developed a reproducible benchmarking harness, stage-level profiling system, and interchangeable model interface that identified preprocessing and inference bottlenecks, achieving up to 12.8× faster forecasting and 12.2% lower fine-tuning latency while supporting forecasting, fine-tuning, and anomaly detection workflows.
+As part of the IBM AssetOpsBench project, our team developed a reproducible benchmarking harness, stage-level profiling system, and interchangeable model interface that identified preprocessing and inference bottlenecks, achieving up to **12.8× faster forecasting latency** with Chronos and approximately **34.6% lower integrated TSAD runtime** using Fast Trainer and bfloat16 optimizations.
 
 ---
 
@@ -228,21 +239,21 @@ TSFM_BENCH_MODES=combined python tsfm_profiling/harness/benchmark_runner.py
 
 # 6. Results and Observations
 
-- Preprocessing parallelism reduced CPU-side bottlenecks by parallelizing preprocessing across asset groups.
-- Preprocessing caching reduced repeated preprocessing work during repeated benchmark runs.
-- AMP optimization improved GPU efficiency during inference and fine-tuning.
-- The benchmarking harness enabled reproducible comparisons across workflows and optimization settings.
-- Integrated TSAD workflows remained significantly more expensive than standalone workflows due to forecasting overhead.
-- Chronos integration demonstrated that the benchmarking harness generalizes beyond TinyTimeMixer.
+- Preprocessing parallelism reduced CPU-side bottlenecks and produced the best fine-tuning result, improving latency from 12.89 s to 11.32 s (12.2% faster).
 
-### Phase 1 Baseline Results
+- Cache-only preprocessing optimization slightly improved standalone TSAD performance but did not consistently improve forecasting or integrated TSAD workloads.
 
-| Workflow | Cold Start (s) | Steady-State Avg (s) |
-|---|---|---|
-| Forecasting | 5.73 | 0.67 |
-| Fine-Tuning | 3.98 | 2.76 |
-| TSAD | 0.32 | 0.31 |
-| Integrated TSAD | 2.05 | 1.35 |
+- Fast Trainer produced the best TinyTimeMixer (TTM) forecasting result, reducing forecasting latency from 46.95 s to 31.31 s (33.3% faster).
+
+- bfloat16 mixed precision execution significantly improved integrated TSAD performance, reducing runtime from 2335.64 s to 1528.25 s (34.6% faster) while improving GPU efficiency.
+
+- Model Cache optimization regressed performance across all workflows, suggesting that model loading was not the dominant bottleneck in repeated benchmark execution.
+
+- Integrated TSAD remained substantially more expensive than standalone workflows because it includes both forecasting and anomaly detection stages in a single pipeline.
+
+- Chronos integration demonstrated that the benchmarking harness generalizes beyond TinyTimeMixer and achieved the best overall forecasting result at 3.67 s using combined optimizations.
+
+- The benchmarking harness and instrumentation system enabled reproducible comparisons across preprocessing, mixed precision, trainer, and model-level optimizations while logging metrics consistently to Weights & Biases.
 
 ---
 
