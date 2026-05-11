@@ -58,7 +58,7 @@ Our work targets both inference and training performance by introducing a stage-
 | Forecasting (TTM) | 46.95 | 31.31 | Fast Trainer | 33.3% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/cnroix9k]() |
 | Forecasting (Chronos) | 46.95 | 3.67 | Combined Optimizations (1 & 2) | 12.8× faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/2bckvz2x]() |
 | Fine-tuning | 12.89 | 11.32 | Parallelism Only | 12.2% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/1wprdiyu]() |
-| TSAD | 109.79 | 107.89 | Cache Only | 1.7% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/bp3p83rq](See Run) |
+| TSAD | 109.79 | 107.89 | Cache Only | 1.7% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/bp3p83rq]() |
 | Integrated TSAD | 2335.64 | 1527.30 | Combined Inference (3+4+5) | 34.6% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/jp9jpbos]() |
 
 ### Optimization Observations
