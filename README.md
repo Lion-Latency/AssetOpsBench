@@ -53,6 +53,8 @@ Our work targets both inference and training performance by introducing a stage-
 
 # 3. Final Results Summary
 
+Headline Result: As part of the IBM AssetOpsBench project, our team developed a reproducible benchmarking harness, stage-level profiling system, and interchangeable model interface that identified preprocessing and inference bottlenecks, achieving up to 33.3% lower latency with TTM and up to 12.8× faster latency with Chronos while supporting forecasting, fine-tuning, and anomaly detection workflows.
+
 | Workflow | Baseline (s) | Best Optimized (s) | Best Optimization | Improvement | W&B Run Link |
 |---|---:|---:|---|---:|---|
 | Forecasting (TTM) | 46.95 | 31.31 | Fast Trainer | 33.3% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/cnroix9k]() |
