@@ -92,7 +92,7 @@ As part of the IBM AssetOpsBench project, our team developed a reproducible benc
 ├── requirements.txt
 ├── deliverables/
 │   ├── Team19_HPML_Final_Report.pdf
-│   └── Team19_HPML_Final_Presentation.pptx
+│   └── Team19_HPML_Final_Presentation.pdf
 ├── src/
 │   └── servers/
 │       └── tsfm/
