@@ -377,14 +377,21 @@ The dashboard includes:
 ## F. Quickstart: Reproduce the Headline Result
 
 ```bash
+# Clone repository
+git clone https://github.com/Lion-Latency/AssetOpsBench.git
+cd AssetOpsBench
+
+# Create environment
+python3 -m venv .venv
+
 # Activate environment
 source .venv/bin/activate
 
-# Install dependencies
+# Install required versions
 pip install "numpy==1.26.4" "transformers==4.45.2"
 
-# Run optimized benchmark
-TSFM_BENCH_MODES=combined python tsfm_profiling/harness/benchmark_runner.py
+# Run benchmark for TTM forecasting with Optimization 4 (Fast Trainer)
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model ttm --workflows forecasting
 ```
 
 ---
