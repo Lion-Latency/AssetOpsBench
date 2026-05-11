@@ -423,7 +423,7 @@ python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combin
 
 - Source code lives under `src/`
 - Benchmarking tools are under `tsfm_profiling/harness/`
-- Functionality verification scripts are under `tsfm_profiling/functionality_verification/`
+- Functionality verification scripts for debugging are under `tsfm_profiling/functionality_verification/`
 - Results and profiling artifacts are stored under `tsfm_profiling/results/`
 
 ---
@@ -493,12 +493,15 @@ Open a GitHub Issue on the repository for questions or discussions.
 
 This repository is forked from the original IBM AssetOpsBench repository and extends it with:
 
-- profiling instrumentation
-- benchmarking harnesses
-- preprocessing optimizations
-- AMP optimization
+- Internal profiling instrumentation
+- External benchmarking harness
+- Cache optimization
+- Parallelism optimization
+- Model cache optimization
+- Fast trainer optimization
+- Bf16 optimization
+- Interchangeable Model Interface
 - Chronos integration
-- reproducibility tooling
 
 Original repository:
 https://github.com/IBM/AssetOpsBench
