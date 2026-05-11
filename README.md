@@ -73,7 +73,7 @@ Our work targets both inference and training performance by introducing a stage-
 | Model Cache | Regressed performance across all workflows |
 | Fast Trainer | Produced the best TTM forecasting result and major integrated TSAD speedup |
 | bf16 | Improved forecasting and integrated TSAD latency through mixed precision execution |
-| Combined Inference (3+4+5) | Achieved the fastest integrated TSAD result overall |
+| Combined Inference (Model Cache + Fast Trainer + bf16) | Achieved the fastest integrated TSAD result overall |
 
 **Hardware:** NVIDIA L4 GPU, CUDA 12.8, Python 3.12, PyTorch 2.10
 
