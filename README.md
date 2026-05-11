@@ -392,6 +392,9 @@ pip install "numpy==1.26.4" "transformers==4.45.2"
 
 # Run benchmark for TTM forecasting with Optimization 4 (Fast Trainer)
 python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model ttm --workflows forecasting
+
+# Run benchmark for Chronos forecasting with Combined Optimizations (1 & 2)
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model chronos --workflows forecasting_chronos
 ```
 
 ---
