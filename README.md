@@ -129,6 +129,9 @@ As part of the IBM AssetOpsBench project, our team developed a reproducible benc
 git clone https://github.com/Lion-Latency/AssetOpsBench.git
 cd AssetOpsBench
 
+# Create environment
+python3 -m venv .venv
+
 # Activate environment
 source .venv/bin/activate
 
@@ -150,73 +153,206 @@ print(np.__version__); print(transformers.__version__)"
 Ensure the local `.env` file points to the shared TSFM directories:
 
 ```bash
-PATH_TO_MODELS_DIR=/home/shared/tsfm_profiling_data/models
-PATH_TO_DATASETS_DIR=/home/shared/tsfm_profiling_data/datasets
-PATH_TO_OUTPUTS_DIR=/home/shared/tsfm_profiling_data/outputs
+PATH_TO_MODELS_DIR=${HOME}/AssetOpsBench/src/servers/tsfm/artifacts/tsfm_models
+PATH_TO_OUTPUTS_DIR=${HOME}/AssetOpsBench/tsfm_profiling/harness/results
 ```
-
 ---
 
-## C. Functionality Verification
-
-### Generate Synthetic Verification Data
-
-```bash
-python tsfm_profiling/baseline_verification/create_synthetic_data.py
-```
-
-### Run Forecasting Check
-
-```bash
-python tsfm_profiling/functionality_verification/run_tsfm_forecasting_check.py
-```
-
-### Run Fine-Tuning Check
-
-```bash
-python tsfm_profiling/functionality_verification/run_tsfm_finetuning_check.py
-```
-
-### Run TSAD Check
-
-```bash
-python tsfm_profiling/functionality_verification/run_tsad_check.py
-```
-
-### Run Integrated TSAD Check
-
-```bash
-python tsfm_profiling/functionality_verification/run_integrated_tsad_check.py
-```
-
-### Run All Checks
-
-```bash
-python tsfm_profiling/functionality_verification/run_all_checks.py
-```
-
----
-
-## D. Benchmarking
+## C. Benchmarking
 
 ### Run Baseline Benchmark
 
 ```bash
-TSFM_BENCH_MODES=baseline python tsfm_profiling/harness/benchmark_runner.py
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py
 ```
 
-### Run Parallelism-Only Benchmark
+#### Specify a mode with: --modes (baseline, cache_only, parallelism_only, combined, model_cache, fast_trainer, bf16, all_inference)
+
+#### Specify a model with: --model (ttm, chronos)
+
+#### Specify a workflow with: --workflows (forecasting, finetuning, tsad, integrated_tsad)
+- Please append "_chronos" when running benchmarks using the Chronos model (Example: forecasting_chronos).
+
+### Run Optimization 1 (Cache Only) Benchmarks
 
 ```bash
-TSFM_BENCH_MODES=parallelism_only python tsfm_profiling/harness/benchmark_runner.py
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model ttm --workflows integrated_tsad
 ```
 
-### Run Combined Optimizations
+### Run Optimization 2 (Parallelism Only) Benchmarks
 
 ```bash
-TSFM_BENCH_MODES=combined python tsfm_profiling/harness/benchmark_runner.py
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model ttm --workflows integrated_tsad
 ```
 
+### Run Combined (Optimizations 1 & 2) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model ttm --workflows integrated_tsad
+```
+
+### Run Optimization 3 (Model Cache) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model ttm --workflows integrated_tsad
+```
+
+### Run Optimization 4 (Fast Trainer) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model ttm --workflows integrated_tsad
+```
+
+### Run Optimization 5 (bf16) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model ttm --workflows integrated_tsad
+```
+
+### Run Combined All Inference (Optimizations 3, 4, & 5) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model ttm --workflows forecasting
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model ttm --workflows finetuning
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model ttm --workflows tsad
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model ttm --workflows integrated_tsad
+```
+
+## Chronos Benchmarks
+
+### Run Chronos - Optimization 1 (Cache Only) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes cache_only --model chronos --workflows integrated_tsad_chronos
+```
+
+### Run Chronos - Optimization 2 (Parallelism Only) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes parallelism_only --model chronos --workflows integrated_tsad_chronos
+```
+
+### Run Chronos - Combined (Optimizations 1 & 2) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes combined --model chronos --workflows integrated_tsad_chronos
+```
+
+### Run Chronos - Optimization 3 (Model Cache) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes model_cache --model chronos --workflows integrated_tsad_chronos
+```
+
+### Run Chronos - Optimization 4 (Fast Trainer) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes fast_trainer --model chronos --workflows integrated_tsad_chronos
+```
+
+### Run Chronos - Optimization 5 (bf16) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes bf16 --model chronos --workflows integrated_tsad_chronos
+```
+
+### Run Chronos - Combined All Inference (Optimizations 3, 4, & 5) Benchmarks
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model chronos --workflows forecasting_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model chronos --workflows finetuning_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model chronos --workflows tsad_chronos
+python ~/AssetOpsBench/tsfm_profiling/harness/benchmark_runner.py --modes all_inference --model chronos --workflows integrated_tsad_chronos
+```
+
+
+---
+
+## D. Functionality Verification (Optional - Only used for debugging.)
+
+### Run TTM Forecasting Check
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/ttm/run_tsfm_forecasting_check.py
+```
+
+### Run TTM Fine-Tuning Check
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/ttm/run_tsfm_finetuning_check.py
+```
+
+### Run TTM TSAD Check
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/ttm/run_tsad_check.py
+```
+
+### Run TTM Integrated TSAD Check
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/ttm/run_integrated_tsad_check.py
+```
+
+### Run Chronos Forecasting Check (Uses Interchangeable Model Interface)
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/chronos/run_tsfm_forecasting_chronos_check.py
+```
+
+### Run Chronos Fine-Tuning Check (Uses Interchangeable Model Interface)
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/chronos/run_tsfm_finetuning_chronos_check.py
+```
+
+### Run Chronos TSAD Check (Uses Interchangeable Model Interface)
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/chronos/run_tsad_chronos_check.py
+```
+
+### Run Chronos Integrated TSAD Check (Uses Interchangeable Model Interface)
+
+```bash
+python ~/AssetOpsBench/tsfm_profiling/functionality_verification/chronos/run_integrated_tsad_chronos_check.py
+```
 ---
 
 ## E. Experiment Tracking Dashboard
