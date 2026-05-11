@@ -156,6 +156,8 @@ Ensure the local `.env` file points to the shared TSFM directories:
 PATH_TO_MODELS_DIR=${HOME}/AssetOpsBench/src/servers/tsfm/artifacts/tsfm_models
 PATH_TO_OUTPUTS_DIR=${HOME}/AssetOpsBench/tsfm_profiling/harness/results
 ```
+
+The dataset is included in the repository to make the experiments easy to reproduce.
 ---
 
 ## C. Benchmarking
