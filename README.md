@@ -11,9 +11,9 @@
 - **Team Name:** Team 19 Lion Latency
 - **Members:**
   - Sally Go (yg3066) — External benchmarking harness, W&B logging, benchmarking
-  - Sam Colman (sc5750) — Internal instrumentation, preprocessing caching
+  - Sam Colman (sc5750) — Internal instrumentation, preprocessing caching, benchmarking
   - Byeolah Kwon (bk2833) — Profiling, preprocessing parallelism, benchmarking
-  - Tomas Pasiecznik (tp2758) — Environment setup, interchangeable model interface
+  - Tomas Pasiecznik (tp2758) — Environment setup, interchangeable model interface, benchmarking
 
 ---
 
@@ -53,13 +53,13 @@ Our work targets both inference and training performance by introducing a stage-
 
 # 3. Final Results Summary
 
-| Workflow | Baseline (s) | Best Optimized (s) | Best Optimization | Improvement |
-|---|---:|---:|---|---|
-| Forecasting (TTM) | 46.95 | 31.31 | Fast Trainer | 33.3% faster |
-| Forecasting (Chronos) | 46.95 | 3.67 | Combined Optimizations (1 & 2) | 12.8× faster |
-| Fine-tuning | 12.89 | 11.32 | Parallelism Only | 12.2% faster |
-| TSAD | 109.79 | 107.89 | Cache Only | 1.7% faster |
-| Integrated TSAD | 2335.64 | 1527.30 | Combined Inference (3+4+5) | 34.6% faster |
+| Workflow | Baseline (s) | Best Optimized (s) | Best Optimization | Improvement | W&B Run Link |
+|---|---:|---:|---|---:|---|
+| Forecasting (TTM) | 46.95 | 31.31 | Fast Trainer | 33.3% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/cnroix9k]() |
+| Forecasting (Chronos) | 46.95 | 3.67 | Combined Optimizations (1 & 2) | 12.8× faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/2bckvz2x]() |
+| Fine-tuning | 12.89 | 11.32 | Parallelism Only | 12.2% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/1wprdiyu]() |
+| TSAD | 109.79 | 107.89 | Cache Only | 1.7% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/bp3p83rq](See Run) |
+| Integrated TSAD | 2335.64 | 1527.30 | Combined Inference (3+4+5) | 34.6% faster | [https://wandb.ai/lion-latency/hpml-project-final/runs/jp9jpbos]() |
 
 ### Optimization Observations
 
